@@ -78,8 +78,66 @@ def generate_html(variants, read_groups, output_path, template_dir='templates'):
     # Get first variant for initial locus
     first_locus = f"{variants[0]['chrom']}:{variants[0]['pos']}" if variants else "D388-WT_OR813926:1"
     
-    # Setup Jinja2 environment
+    reference_info = {
+            'id': "custom",
+            'name': "D388-WT_OR813926",
+            'fastaURL': "D388_WT.fa",
+            'indexURL': "D388_WT.fa.fai"
+    }
+    bam_path = "alignment.markdup.bam"
+    vcf_path = "calls.norm.vcf.gz"
+    igv_options = {
+        'reference': reference_info,
+        'locus': first_locus,
+        'tracks': [
+            {
+                'name': 'All Alignments',
+                'type': 'alignment',
+                'format': 'bam',
+                'url': bam_path,
+                'indexURL': f"{bam_path}.bai",
+                'height': 300,
+                'viewAsPairs': False,
+                'showCoverage': True
+                # Note: 'filter' is set dynamically in JS via getFilterSettings()
+            },
+            {
+                'name': 'Variants',
+                'type': 'variant',
+                'format': 'vcf',
+                'url': vcf_path,
+                'indexURL': f"{vcf_path}.tbi"
+            }
+        ]
+    }
+
+    # Build config
+    config = {
+        'reference': reference_info,
+        'bam': {
+            'path': bam_path,
+            'indexPath': f"{bam_path}.bai"
+        },
+        'vcf': {
+            'path': vcf_path,
+            'indexPath': f"{vcf_path}.tbi"
+        },
+        'initialLocus': first_locus,
+        'igvOptions': igv_options  # Add igvOptions to config
+    }
+    
+    template_data = {
+        'config_json': json.dumps(config, indent=2),
+    }
+
     env = Environment(loader=FileSystemLoader(template_dir))
+    # Render config.js
+    config_template = env.get_template('config.js.j2')
+    config_content = config_template.render(**template_data)
+    with open('static/js/config.js', 'w') as f:
+        f.write(config_content)
+    
+    # Setup Jinja2 environment
     template = env.get_template('viewer.html.j2')
     
     # Render template

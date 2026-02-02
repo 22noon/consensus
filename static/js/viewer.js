@@ -462,36 +462,14 @@ function initializeEventListeners() {
 }
 
 async function initializeIGV() {
-    const igvOptions = {
-        reference: {
-            id: "custom",
-            name: "D388-WT_OR813926",
-            fastaURL: "D388_WT.fa",
-            indexURL: "D388_WT.fa.fai"
-        },
-        locus: INITIAL_LOCUS,
-        tracks: [
-            {
-                name: "All Alignments",
-                type: "alignment",
-                format: "bam",
-                url: "alignment.markdup.bam",
-                indexURL: "alignment.markdup.bam.bai",
-                height: 300,
-                viewAsPairs: false,
-                showCoverage: true,
-                filter: getFilterSettings()
-            },
-            {
-                name: "Variants",
-                type: "variant",
-                format: "vcf",
-                url: "calls.norm.vcf.gz",
-                indexURL: "calls.norm.vcf.gz.tbi"
-            }
-        ]
-    };
+    const igvOptions = CONFIG.igvOptions;
+    // Add dynamic filter to alignment track
+    const alignmentTrack = igvOptions.tracks.find(t => t.type === 'alignment');
+    igvOptions.tracks[0].filter = getFilterSettings();
 
+    //if (alignmentTrack) {
+    //    alignmentTrack.filter = getFilterSettings();
+    //}
     browser = await igv.createBrowser(document.getElementById('igv-div'), igvOptions);
     console.log("IGV browser initialized");
 

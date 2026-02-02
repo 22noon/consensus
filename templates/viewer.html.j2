@@ -73,7 +73,8 @@
                             <select id="read-group-select" class="filter-input" disabled>
                                 <option value="">All Read Groups</option>
                                 {% for rg in read_groups %}
-                                <option value="{{ rg.id }}" data-color="{{ rg.color }}">{{ rg.id }} ({{ rg.sample }})</option>
+                                {# <option value="{{ rg.id }}" data-color="{{ rg.color }}">{{ rg.id }} ({{ rg.sample }})</option> #}
+                                <option value="{{ rg.id }}" data-color="{{ rg.color }}">{{ rg.id }} </option>
                                 {% endfor %}
                             </select>
                             <span class="color-indicator" id="color-indicator"></span>
@@ -115,6 +116,7 @@
     </script>
     
     <!-- Main application script -->
+    <script src="static/js/config.js"></script>
     <script src="static/js/viewer.js"></script>
 </body>
 </html>
