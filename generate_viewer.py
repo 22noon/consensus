@@ -8,7 +8,14 @@ import pysam
 import json
 from jinja2 import Environment, FileSystemLoader
 from pathlib import Path
+import argparse
 
+parser = argparse.ArgumentParser(description="Generate IGV.js viewer")
+parser.add_argument("--genome-name", help="Genome name/id")
+parser.add_argument("--reference-fasta", help="Reference FASTA path/URL")
+parser.add_argument("--bam-path", default="alignment.markdup.bam", help="BAM file path/URL")
+parser.add_argument("--vcf-path", default="calls.norm.vcf.gz", help="VCF file path/URL")
+args = parser.parse_args()
 
 def read_variants_from_vcf(vcf_path):
     """Extract variants from VCF file"""
@@ -80,12 +87,19 @@ def generate_html(variants, read_groups, output_path, template_dir='templates'):
     
     reference_info = {
             'id': "custom",
-            'name': "D388-WT_OR813926",
-            'fastaURL': "D388_WT.fa",
-            'indexURL': "D388_WT.fa.fai"
+            'name': "",
+            'fastaURL': "",
+            'indexURL': ""
     }
-    bam_path = "alignment.markdup.bam"
-    vcf_path = "calls.norm.vcf.gz"
+
+    # Update reference info from CLI
+    reference_info["name"] = args.genome_name
+    reference_info["fastaURL"] = args.reference_fasta
+    reference_info["indexURL"] = f"{args.reference_fasta}.fai"
+
+    # Set BAM/VCF from CLI (these may override later defaults)
+    bam_path = args.bam_path
+    vcf_path = args.vcf_path
     igv_options = {
         'reference': reference_info,
         'locus': first_locus,
@@ -113,16 +127,6 @@ def generate_html(variants, read_groups, output_path, template_dir='templates'):
 
     # Build config
     config = {
-        'reference': reference_info,
-        'bam': {
-            'path': bam_path,
-            'indexPath': f"{bam_path}.bai"
-        },
-        'vcf': {
-            'path': vcf_path,
-            'indexPath': f"{vcf_path}.tbi"
-        },
-        'initialLocus': first_locus,
         'igvOptions': igv_options  # Add igvOptions to config
     }
     
