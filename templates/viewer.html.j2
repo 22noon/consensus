@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Interactive Variant Browser</title>
+    <script src="https://cdn.jsdelivr.net/npm/igv@3.7.3/dist/igv.min.js"></script>
+    <link rel="stylesheet" href="static/css/styles.css">
+</head>
+<body>
+    <h1>Interactive Variant Browser</h1>
+    
+    <div class="container">
+        <!-- Left Pane: Variant Table -->
+        <div class="left-pane">
+            <div class="table-container">
+                <table id="variant-table">
+                    <thead>
+                        <tr>
+                            <th>Position</th>
+                            <th>Ref</th>
+                            <th>Alt</th>
+                            <th>Info</th>
+                        </tr>
+                    </thead>
+                    <tbody id="variant-tbody"></tbody>
+                </table>
+            </div>
+            
+            <!-- Controls Container -->
+            <div class="controls-container">
+                <div class="controls">
+                    <!-- Navigation Controls -->
+                    <div>
+                        <label for="flank-size">Flank Size (bp):</label>
+                        <input type="number" id="flank-size" value="100" min="10" max="1000" step="10">
+                        <label>
+                            <input type="checkbox" id="show-spanning" checked>
+                            Show Spanning Reads Track
+                        </label>
+                        <label>
+                            <input type="checkbox" id="view-as-pairs">
+                            View as Pairs
+                        </label>
+                    </div>
+
+                    <!-- Read Filters -->
+                    <div class="filter-section">
+                        <h4>Read Filters: <span class="filter-status" id="filter-status"></span></h4>
+                        <label><input type="checkbox" id="filter-duplicates" class="filter-checkbox" > Hide Duplicates</label>
+                        <label><input type="checkbox" id="filter-secondary" class="filter-checkbox" checked> Hide Secondary</label>
+                        <label><input type="checkbox" id="filter-supplementary" class="filter-checkbox" checked> Hide Supplementary</label>
+                        <label><input type="checkbox" id="filter-qcfail" class="filter-checkbox"> Hide QC Failed</label>
+                        <label><input type="checkbox" id="filter-unpaired" class="filter-checkbox"> Hide Unpaired Reads</label>
+                        <label><input type="checkbox" id="filter-improperpair" class="filter-checkbox"> Hide Improper Pairs</label>
+                        <label>
+                            MAPQ ≥ <input type="number" id="min-mapq" class="filter-input" value="0" min="0" max="60">
+                        </label>
+                    </div>
+
+                    <!-- Read Group Options -->
+                    <div class="filter-section">
+                        <h4>Read Group Options:</h4>
+                        <div>
+                            <label>
+                                <input type="checkbox" id="enable-rg-color" class="filter-checkbox">
+                                Color by Read Group
+                            </label>
+                        </div>
+                        <div class="rg-subsection">
+                            <label>
+                                <input type="checkbox" id="enable-rg-filter" class="filter-checkbox">
+                                Filter by Read Group:
+                            </label>
+                            <select id="read-group-select" class="filter-input" disabled>
+                                <option value="">All Read Groups</option>
+                                {% for rg in read_groups %}
+                                <option value="{{ rg.id }}" data-color="{{ rg.color }}">{{ rg.id }} ({{ rg.sample }})</option>
+                                {% endfor %}
+                            </select>
+                            <span class="color-indicator" id="color-indicator"></span>
+                            <span class="rg-info" id="rg-info"></span>
+                        </div>
+                    </div>
+
+                    <!-- Read Selection -->
+                    <div class="filter-section">
+                        <h4>Read Selection & Highlighting:</h4>
+                        <p style="font-size: 11px; color: #666; margin: 5px 0;">
+                            Click on read names to search 
+                        </p>
+                        <div>
+                            <input type="text" id="highlight-read-name" placeholder="Enter read name" style="width: 200px;">
+                            <button class="btn" onclick="addReadToList()">Add to List</button>
+                            <button class="btn btn-secondary" onclick="clearReadList()">Clear All</button>
+                            <button class="btn btn-secondary" onclick="clearHighlightedReads()">Clear Highlights</button>
+                        </div>
+                        <div id="highlighted-reads-list"></div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        
+        <!-- Right Pane: IGV Browser -->
+        <div class="right-pane">
+            <div id="igv-div"></div>
+        </div>
+    </div>
+
+    <!-- Embed data as JavaScript -->
+    <script>
+        // Data from Python
+        const VARIANTS_DATA = {{ variants_json | safe }};
+        const READ_GROUPS_DATA = {{ read_groups_json | safe }};
+        const INITIAL_LOCUS = "{{ first_locus }}";
+    </script>
+    
+    <!-- Main application script -->
+    <script src="static/js/viewer.js"></script>
+</body>
+</html>
