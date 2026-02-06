@@ -16,6 +16,8 @@ parser.add_argument("--reference-fasta", help="Reference FASTA path/URL")
 parser.add_argument("--bam-path", default="alignment.markdup.bam", help="BAM file path/URL")
 parser.add_argument("--vcf-path", default="calls.norm.vcf.gz", help="VCF file path/URL")
 args = parser.parse_args()
+bam_path = args.bam_path
+vcf_path = args.vcf_path
 
 def read_variants_from_vcf(vcf_path):
     """Extract variants from VCF file"""
@@ -54,6 +56,34 @@ def extract_read_groups(bam_path):
     read_groups = [
         {
             'id': 'NON_SPANNING_MATE',
+            'sample': '',
+            'library': 'unknown',
+            'platform': 'ILLUMINA',
+            'color': 'rgb(255, 100, 100)'
+        },
+        {
+            'id': 'UNPAIRED',
+            'sample': '',
+            'library': 'unknown',
+            'platform': 'ILLUMINA',
+            'color': 'rgb(255, 100, 100)'
+        },
+        {
+            'id': 'IMPROPER',
+            'sample': '',
+            'library': 'unknown',
+            'platform': 'ILLUMINA',
+            'color': 'rgb(255, 100, 100)'
+        },
+        {
+            'id': 'PROPER',
+            'sample': '',
+            'library': 'unknown',
+            'platform': 'ILLUMINA',
+            'color': 'rgb(255, 100, 100)'
+        },
+        {
+            'id': 'OVERLAP',
             'sample': '',
             'library': 'unknown',
             'platform': 'ILLUMINA',
@@ -98,23 +128,21 @@ def generate_html(variants, read_groups, output_path, template_dir='templates'):
     reference_info["indexURL"] = f"{args.reference_fasta}.fai"
 
     # Set BAM/VCF from CLI (these may override later defaults)
-    bam_path = args.bam_path
-    vcf_path = args.vcf_path
     igv_options = {
         'reference': reference_info,
         'locus': first_locus,
         'tracks': [
-            {
-                'name': 'All Alignments',
-                'type': 'alignment',
-                'format': 'bam',
-                'url': bam_path,
-                'indexURL': f"{bam_path}.bai",
-                'height': 300,
-                'viewAsPairs': False,
-                'showCoverage': True
-                # Note: 'filter' is set dynamically in JS via getFilterSettings()
-            },
+            # {
+            #     'name': 'All Alignments',
+            #     'type': 'alignment',
+            #     'format': 'bam',
+            #     'url': bam_path,
+            #     'indexURL': f"{bam_path}.bai",
+            #     'height': 300,
+            #     'viewAsPairs': False,
+            #     'showCoverage': True
+            #     # Note: 'filter' is set dynamically in JS via getFilterSettings()
+            # },
             {
                 'name': 'Variants',
                 'type': 'variant',
@@ -163,8 +191,6 @@ def generate_html(variants, read_groups, output_path, template_dir='templates'):
 def main():
     """Main execution"""
     # Configuration
-    vcf_path = "calls.norm.vcf.gz"
-    bam_path = "alignment.markdup.bam"
     output_path = "interactive_variants.html"
     
     print("Reading variants from VCF...")
