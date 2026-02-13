@@ -250,16 +250,18 @@ function getFilterSettings() {
     const filters = {
         vendorFailed: document.getElementById('filter-qcfail').checked,
         duplicates: document.getElementById('filter-duplicates').checked,
-        secondaryAlignments: document.getElementById('filter-secondary').checked,
-        supplementaryAlignments: document.getElementById('filter-supplementary').checked,
+        secondary: document.getElementById('filter-secondary').checked,
+        supplementary: document.getElementById('filter-supplementary').checked,
         readPaired: document.getElementById('filter-unpaired').checked,
         properPair: document.getElementById('filter-improperpair').checked,
         mqThreshold: parseInt(document.getElementById('min-mapq').value) || 0
     };
 
     if (enableRGFilter && selectedRG) {
+        console.log("Applying read group filter for RG:", selectedRG);
         filters.readgroups = new Set([selectedRG]);
     }
+    console.log("Current filter settings:", filters);
 
     return filters;
 }
@@ -293,7 +295,7 @@ async function applyFilters() {
             alignmentTracks.push({
                 name: trackView.track.name,
                 url: trackView.track.url,
-                indexURL: trackView.track.indexURL || (trackView.track.url + '.bai'),
+                indexURL: trackView.track.indexURL || (trackView.track.url.replace(/^bam(?=\/|$)/, 'bai')),
                 height: trackView.track.height,
                 defaultColor: trackView.track.config.color || 'rgb(170, 170, 170)',
                 showCoverage: trackView.track.showCoverage
@@ -311,7 +313,6 @@ async function applyFilters() {
     // Reload tracks with new filters
     for (const trackConfig of alignmentTracks) {
         const trackColor = getTrackColor(trackConfig.defaultColor);
-
         const newTrackConfig = {
             name: trackConfig.name,
             type: "alignment",
@@ -375,8 +376,8 @@ async function navigateToVariant(variant, flankSize) {
             name: "Spanning Reads Only",
             type: "alignment",
             format: "bam",
-            url: `bam/variant_${variant.chrom}_${variant.pos}.bam`,
-            indexURL: `bam/variant_${variant.chrom}_${variant.pos}.bam.bai`,
+            url: `bam/variant_${variant.chrom}_${variant.pos}`,
+            indexURL: `bai/variant_${variant.chrom}_${variant.pos}`,
             height: 300,
             viewAsPairs: viewAsPairs,
             showCoverage: true,
