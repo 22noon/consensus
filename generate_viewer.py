@@ -55,6 +55,13 @@ def extract_read_groups(bam_path):
     # Add custom read group first
     read_groups = [
         {
+            'id': 'SPLIT',
+            'sample': '',
+            'library': 'unknown',
+            'platform': 'ILLUMINA',
+            'color': 'rgb(255, 100, 100)'
+        },
+        {
             'id': 'NON_SPANNING_MATE',
             'sample': '',
             'library': 'unknown',

@@ -247,15 +247,27 @@ function getFilterSettings() {
     const enableRGFilter = document.getElementById('enable-rg-filter').checked;
     const selectedRG = document.getElementById('read-group-select').value;
 
+    qcFailed= document.getElementById('filter-qcfail').checked;
+    duplicates= document.getElementById('filter-duplicates').checked;
+    secondary= document.getElementById('filter-secondary').checked;
+    supplementary= document.getElementById('filter-supplementary').checked;
+    readPaired= document.getElementById('filter-paired').checked;
+    properPair= document.getElementById('filter-properpair').checked;
+
+    FqcFailed = document.getElementById('retain-qcfail').checked;
+    Fduplicates = document.getElementById('retain-duplicates').checked;
+    Fsecondary = document.getElementById('retain-secondary').checked;
+    Fsupplementary = document.getElementById('retain-supplementary').checked;
+    FreadPaired = document.getElementById('retain-paired').checked;
+    FproperPair = document.getElementById('retain-properpair').checked;
+
     const filters = {
-        vendorFailed: document.getElementById('filter-qcfail').checked,
-        duplicates: document.getElementById('filter-duplicates').checked,
-        secondary: document.getElementById('filter-secondary').checked,
-        supplementary: document.getElementById('filter-supplementary').checked,
-        readPaired: document.getElementById('filter-unpaired').checked,
-        properPair: document.getElementById('filter-improperpair').checked,
         mqThreshold: parseInt(document.getElementById('min-mapq').value) || 0
     };
+
+
+    filters.flagf = MapFlag(readPaired, properPair, secondary, qcFailed, duplicates, supplementary);
+    filters.flagF = MapFlag(FreadPaired, FproperPair, Fsecondary, FqcFailed, Fduplicates, Fsupplementary);
 
     if (enableRGFilter && selectedRG) {
         console.log("Applying read group filter for RG:", selectedRG);
@@ -264,6 +276,26 @@ function getFilterSettings() {
     console.log("Current filter settings:", filters);
 
     return filters;
+}
+
+function MapFlag(readPaired, properPair, secondary, qcFailed, duplicates, supplementary) {
+    const FLAG_PAIRED = 0x1; // template having multiple segments in sequencing
+    const FLAG_PROPER_PAIR = 0x2; // each segment properly aligned according to the aligner
+    const FLAG_SECONDARY = 0x100; // not primary alignment
+    const FLAG_QCFAIL = 0x200; // read fails platform/vendor quality checks
+    const FLAG_DUPLICATE = 0x400; // PCR or optical duplicate
+    const FLAG_SUPPLEMENTARY = 0x800; // supplementary alignment
+
+
+    // Build combined flag value from checkbox selections
+    let combinedFlag = 0;
+    if (readPaired) combinedFlag |= FLAG_PAIRED;
+    if (properPair) combinedFlag |= FLAG_PROPER_PAIR;
+    if (secondary) combinedFlag |= FLAG_SECONDARY;
+    if (qcFailed) combinedFlag |= FLAG_QCFAIL;
+    if (duplicates) combinedFlag |= FLAG_DUPLICATE;
+    if (supplementary) combinedFlag |= FLAG_SUPPLEMENTARY;
+    return combinedFlag;
 }
 
 function getTrackColor(defaultColor) {
@@ -280,7 +312,23 @@ function getTrackColor(defaultColor) {
     return defaultColor;
 }
 
-async function applyFilters() {
+async function applyFilters(e) {
+
+    if (e.target.checked) {
+        id = e.target.id;
+        if (id.startsWith("filter-") || id.startsWith("retain-")) {
+            complementId = id.startsWith("filter-")
+                ? id.replace("filter-", "retain-")
+                : id.replace("retain-", "filter-");
+            complement = document.getElementById(complementId);
+            if (complement.checked) {
+                alert(`Unchecking ${complementId} to avoid conflicting filters.`);
+                complement.checked = false;
+            }
+        }
+    }
+
+
     const statusEl = document.getElementById('filter-status');
     statusEl.textContent = 'Applying...';
 
@@ -292,10 +340,11 @@ async function applyFilters() {
     const alignmentTracks = [];
     browser.trackViews.forEach(trackView => {
         if (trackView.track.type === 'alignment') {
+            trackView.track.url = trackView.track.url.split('?')[0]; // Remove existing filters
             alignmentTracks.push({
                 name: trackView.track.name,
                 url: trackView.track.url,
-                indexURL: trackView.track.indexURL || (trackView.track.url.replace(/^bam(?=\/|$)/, 'bai')),
+                indexURL: (trackView.track.url.replace(/^bam(?=\/|$)/, 'bai')),
                 height: trackView.track.height,
                 defaultColor: trackView.track.config.color || 'rgb(170, 170, 170)',
                 showCoverage: trackView.track.showCoverage
@@ -311,14 +360,15 @@ async function applyFilters() {
     }
 
     // Reload tracks with new filters
+    filter_string = Create_Filter_String(filters);
     for (const trackConfig of alignmentTracks) {
         const trackColor = getTrackColor(trackConfig.defaultColor);
         const newTrackConfig = {
             name: trackConfig.name,
             type: "alignment",
             format: "bam",
-            url: trackConfig.url,
-            indexURL: trackConfig.indexURL,
+            url: trackConfig.url + filter_string,
+            indexURL: trackConfig.indexURL + filter_string,
             height: trackConfig.height,
             viewAsPairs: viewAsPairs,
             showCoverage: trackConfig.showCoverage,
@@ -338,6 +388,14 @@ async function applyFilters() {
     browser.search(currentLocus);
     statusEl.textContent = 'Applied';
     setTimeout(() => { statusEl.textContent = ''; }, 2000);
+}
+
+function Create_Filter_String(filters) {
+    filter_string = `?Flagf=${filters.flagf}&FlagF=${filters.flagF}&minMapQ=${filters.mqThreshold}`;
+    if (filters.readgroups) {
+        filter_string += `&rg=${[...filters.readgroups].join(',')}`;
+    }
+    return filter_string;
 }
 
 function scheduleFilterApplication() {
@@ -376,8 +434,8 @@ async function navigateToVariant(variant, flankSize) {
             name: "Spanning Reads Only",
             type: "alignment",
             format: "bam",
-            url: `bam/variant_${variant.chrom}_${variant.pos}`,
-            indexURL: `bai/variant_${variant.chrom}_${variant.pos}`,
+            url: `bam/variant_${variant.chrom}_${variant.pos}`, //?Flagf=${filters.flagf}&FlagF=0`,
+            indexURL: `bai/variant_${variant.chrom}_${variant.pos}`, //?Flagf=${filters.flagf}&FlagF=0`,
             height: 300,
             viewAsPairs: viewAsPairs,
             showCoverage: true,
@@ -468,9 +526,6 @@ async function initializeIGV() {
     const alignmentTrack = igvOptions.tracks.find(t => t.type === 'alignment');
     igvOptions.tracks[0].filter = getFilterSettings();
 
-    //if (alignmentTrack) {
-    //    alignmentTrack.filter = getFilterSettings();
-    //}
     browser = await igv.createBrowser(document.getElementById('igv-div'), igvOptions);
     console.log("IGV browser initialized");
 
