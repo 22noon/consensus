@@ -5,7 +5,7 @@
 
 // Global State
 const variants = VARIANTS_DATA;
-const readGroups = READ_GROUPS_DATA;
+//const readGroups = READ_GROUPS_DATA;
 let browser;
 let spanningTrackLoaded = false;
 let currentVariant = null;
@@ -14,17 +14,17 @@ let filterTimeout = null;
 let selectedReads = new Set();
 
 // Read Group Color Map
-const rgColorMap = {};
-readGroups.forEach(rg => {
-    rgColorMap[rg.id] = rg.color;
-});
+// const rgColorMap = {};
+// readGroups.forEach(rg => {
+//     rgColorMap[rg.id] = rg.color;
+// });
 
 /**
  * Utility Functions
  */
-function getColorForReadGroup(rgId) {
-    return rgColorMap[rgId] || 'rgb(170, 170, 170)';
-}
+// function getColorForReadGroup(rgId) {
+//     return rgColorMap[rgId] || 'rgb(170, 170, 170)';
+// }
 
 /**
  * Read Selection Functions
@@ -221,31 +221,31 @@ function handleTrackClick(track, popoverData) {
 /**
  * Read Group Functions
  */
-function updateReadGroupInfo() {
-    const rgSelect = document.getElementById('read-group-select');
-    const rgInfo = document.getElementById('rg-info');
-    const colorIndicator = document.getElementById('color-indicator');
-    const selectedRG = rgSelect.value;
+// function updateReadGroupInfo() {
+//     const rgSelect = document.getElementById('read-group-select');
+//     const rgInfo = document.getElementById('rg-info');
+//     const colorIndicator = document.getElementById('color-indicator');
+//     const selectedRG = rgSelect.value;
 
-    if (!selectedRG) {
-        rgInfo.textContent = '';
-        colorIndicator.style.backgroundColor = '';
-        return;
-    }
+//     if (!selectedRG) {
+//         rgInfo.textContent = '';
+//         colorIndicator.style.backgroundColor = '';
+//         return;
+//     }
 
-    const rg = readGroups.find(r => r.id === selectedRG);
-    if (rg) {
-        rgInfo.textContent = `Sample: ${rg.sample}, Library: ${rg.library}, Platform: ${rg.platform}`;
-        colorIndicator.style.backgroundColor = rg.color;
-    }
-}
+//     const rg = readGroups.find(r => r.id === selectedRG);
+//     if (rg) {
+//         rgInfo.textContent = `Sample: ${rg.sample}, Library: ${rg.library}, Platform: ${rg.platform}`;
+//         colorIndicator.style.backgroundColor = rg.color;
+//     }
+// }
 
 /**
  * Filter Functions
  */
 function getFilterSettings() {
-    const enableRGFilter = document.getElementById('enable-rg-filter').checked;
-    const selectedRG = document.getElementById('read-group-select').value;
+    //const enableRGFilter = document.getElementById('enable-rg-filter').checked;
+    //const selectedRG = document.getElementById('read-group-select').value;
     //Exclude
     qcFailed= document.getElementById('filter-qcfail').checked;
     duplicated= document.getElementById('filter-duplicates').checked;
@@ -286,10 +286,10 @@ function getFilterSettings() {
     filters.tagf = MapTag(overlap, nonSpanningMate, splitX, split, proper, improper);
     filters.tagF = MapTag(Foverlap, FnonSpanningMate, FsplitX, Fsplit, Fproper, Fimproper);
 
-    if (enableRGFilter && selectedRG) {
-        console.log("Applying read group filter for RG:", selectedRG);
-        filters.readgroups = new Set([selectedRG]);
-    }
+    // if (enableRGFilter && selectedRG) {
+    //     console.log("Applying read group filter for RG:", selectedRG);
+    //     filters.readgroups = new Set([selectedRG]);
+    // }
     console.log("Current filter settings:", filters);
 
     return filters;
@@ -335,16 +335,16 @@ function MapFlag(readPaired, properPair, secondary, qcFailed, duplicates, supple
 }
 
 function getTrackColor(defaultColor) {
-    const colorByRG = document.getElementById('enable-rg-color').checked;
-    const filterByRG = document.getElementById('enable-rg-filter').checked;
-    const selectedRG = document.getElementById('read-group-select').value;
+    // const colorByRG = document.getElementById('enable-rg-color').checked;
+    // const filterByRG = document.getElementById('enable-rg-filter').checked;
+    // const selectedRG = document.getElementById('read-group-select').value;
 
-    if (colorByRG) {
-        return 'colorByReadGroup';
-    }
-    if (filterByRG && selectedRG) {
-        return getColorForReadGroup(selectedRG);
-    }
+    //if (colorByRG) {
+    //    return 'colorByReadGroup';
+    //}
+    //if (filterByRG && selectedRG) {
+    //    return getColorForReadGroup(selectedRG);
+   // }
     return defaultColor;
 }
 
@@ -365,8 +365,8 @@ async function applyFilters(e) {
     }
 
 
-    const statusEl = document.getElementById('filter-status');
-    statusEl.textContent = 'Applying...';
+   // const statusEl = document.getElementById('filter-status');
+   // statusEl.textContent = 'Applying...';
 
     const filters = getFilterSettings();
     const currentLocus = browser.currentLoci()[0];
@@ -382,7 +382,7 @@ async function applyFilters(e) {
                 url: trackView.track.url,
                 indexURL: (trackView.track.url.replace(/^bam(?=\/|$)/, 'bai')),
                 height: trackView.track.height,
-                defaultColor: trackView.track.config.color, //|| 'rgb(170, 170, 170)',
+                //defaultColor: trackView.track.config.color, //|| 'rgb(170, 170, 170)',
                 showCoverage: trackView.track.showCoverage
             });
         }
@@ -411,12 +411,12 @@ async function applyFilters(e) {
             filter: filters
         };
 
-        if (trackColor !== 'colorByReadGroup') {
-            newTrackConfig.color = trackColor;
-        } else {
-            newTrackConfig.colorBy = 'tag';
-            newTrackConfig.colorByTag = 'RG';
-        }
+        // if (trackColor !== 'colorByReadGroup') {
+        //     newTrackConfig.color = trackColor;
+        // } else {
+        //     newTrackConfig.colorBy = 'tag';
+        //     newTrackConfig.colorByTag = 'RG';
+        // }
 
         await browser.loadTrack(newTrackConfig);
     }
@@ -428,9 +428,9 @@ async function applyFilters(e) {
 
 function Create_Filter_String(filters) {
     filter_string = `?Flagf=${filters.flagf}&FlagF=${filters.flagF}&Tagf=${filters.tagf}&TagF=${filters.tagF}&minMapQ=${filters.mqThreshold}`;
-    if (filters.readgroups) {
-        filter_string += `&rg=${[...filters.readgroups].join(',')}`;
-    }
+    // if (filters.readgroups) {
+    //     filter_string += `&rg=${[...filters.readgroups].join(',')}`;
+    // }
     return filter_string;
 }
 
@@ -465,7 +465,7 @@ async function navigateToVariant(variant, flankSize) {
 
     // Load spanning reads track if enabled
     if (showSpanning) {
-        const spanningColor = getTrackColor("rgb(255, 100, 100)");
+        //const spanningColor = getTrackColor("rgb(255, 100, 100)");
         const spanningTrackConfig = {
             name: "Spanning Reads Only",
             type: "alignment",
@@ -478,12 +478,12 @@ async function navigateToVariant(variant, flankSize) {
             filter: filters
         };
 
-        if (spanningColor !== 'colorByReadGroup') {
-            spanningTrackConfig.color = spanningColor;
-        } else {
-            spanningTrackConfig.colorBy = 'tag';
-            spanningTrackConfig.colorByTag = 'RG';
-        }
+        // if (spanningColor !== 'colorByReadGroup') {
+        //     spanningTrackConfig.color = spanningColor;
+        // } else {
+        //     spanningTrackConfig.colorBy = 'tag';
+        //     spanningTrackConfig.colorByTag = 'RG';
+        // }
 
         await browser.loadTrack(spanningTrackConfig)
             .then(() => { spanningTrackLoaded = true; })
@@ -511,18 +511,18 @@ function initializeVariantTable() {
 
 function initializeEventListeners() {
     // Read group filter toggle
-    document.getElementById('enable-rg-filter').addEventListener('change', function () {
-        document.getElementById('read-group-select').disabled = !this.checked;
-        if (this.checked) {
-            updateReadGroupInfo();
-        } else {
-            document.getElementById('rg-info').textContent = '';
-            document.getElementById('color-indicator').style.backgroundColor = '';
-        }
-    });
+    // document.getElementById('enable-rg-filter').addEventListener('change', function () {
+    //     document.getElementById('read-group-select').disabled = !this.checked;
+    //     if (this.checked) {
+    //         updateReadGroupInfo();
+    //     } else {
+    //         document.getElementById('rg-info').textContent = '';
+    //         document.getElementById('color-indicator').style.backgroundColor = '';
+    //     }
+    // });
 
     // Read group selection change
-    document.getElementById('read-group-select').addEventListener('change', updateReadGroupInfo);
+    //document.getElementById('read-group-select').addEventListener('change', updateReadGroupInfo);
 
     // Filter checkboxes
     document.querySelectorAll('.filter-checkbox').forEach(cb => {
@@ -533,7 +533,7 @@ function initializeEventListeners() {
     document.getElementById('view-as-pairs').addEventListener('change', applyFilters);
 
     // Read group select
-    document.getElementById('read-group-select').addEventListener('change', scheduleFilterApplication);
+    //document.getElementById('read-group-select').addEventListener('change', scheduleFilterApplication);
 
     // MAPQ threshold
     document.getElementById('min-mapq').addEventListener('input', scheduleFilterApplication);
