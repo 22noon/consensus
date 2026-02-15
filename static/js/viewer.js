@@ -246,28 +246,45 @@ function updateReadGroupInfo() {
 function getFilterSettings() {
     const enableRGFilter = document.getElementById('enable-rg-filter').checked;
     const selectedRG = document.getElementById('read-group-select').value;
-
+    //Exclude
     qcFailed= document.getElementById('filter-qcfail').checked;
-    duplicates= document.getElementById('filter-duplicates').checked;
+    duplicated= document.getElementById('filter-duplicates').checked;
     secondary= document.getElementById('filter-secondary').checked;
     supplementary= document.getElementById('filter-supplementary').checked;
     readPaired= document.getElementById('filter-paired').checked;
     properPair= document.getElementById('filter-properpair').checked;
-
+    //Include
     FqcFailed = document.getElementById('retain-qcfail').checked;
-    Fduplicates = document.getElementById('retain-duplicates').checked;
+    Fduplicated = document.getElementById('retain-duplicates').checked;
     Fsecondary = document.getElementById('retain-secondary').checked;
     Fsupplementary = document.getElementById('retain-supplementary').checked;
     FreadPaired = document.getElementById('retain-paired').checked;
     FproperPair = document.getElementById('retain-properpair').checked;
+
+    //Exclude
+    overlap = document.getElementById('filter-tag-overlap').checked;
+    nonSpanningMate = document.getElementById('filter-tag-nonspanningmate').checked;
+    splitX = document.getElementById('filter-tag-splitx').checked;
+    split = document.getElementById('filter-tag-split').checked;
+    proper = document.getElementById('filter-tag-proper').checked;
+    improper = document.getElementById('filter-tag-improper').checked;
+    //Include
+    Foverlap = document.getElementById('retain-tag-overlap').checked;
+    FnonSpanningMate = document.getElementById('retain-tag-nonspanningmate').checked;
+    FsplitX = document.getElementById('retain-tag-splitx').checked;
+    Fsplit = document.getElementById('retain-tag-split').checked;
+    Fproper = document.getElementById('retain-tag-proper').checked;
+    Fimproper = document.getElementById('retain-tag-improper').checked;
 
     const filters = {
         mqThreshold: parseInt(document.getElementById('min-mapq').value) || 0
     };
 
 
-    filters.flagf = MapFlag(readPaired, properPair, secondary, qcFailed, duplicates, supplementary);
-    filters.flagF = MapFlag(FreadPaired, FproperPair, Fsecondary, FqcFailed, Fduplicates, Fsupplementary);
+    filters.flagf = MapFlag(readPaired, properPair, secondary, qcFailed, duplicated, supplementary);
+    filters.flagF = MapFlag(FreadPaired, FproperPair, Fsecondary, FqcFailed, Fduplicated, Fsupplementary);
+    filters.tagf = MapTag(overlap, nonSpanningMate, splitX, split, proper, improper);
+    filters.tagF = MapTag(Foverlap, FnonSpanningMate, FsplitX, Fsplit, Fproper, Fimproper);
 
     if (enableRGFilter && selectedRG) {
         console.log("Applying read group filter for RG:", selectedRG);
@@ -276,6 +293,25 @@ function getFilterSettings() {
     console.log("Current filter settings:", filters);
 
     return filters;
+}
+
+function MapTag(overlap, nonSpanningMate, splitX, split, proper, improper) {
+    const TAG_OVERLAP = 0x1;
+    const TAG_NON_SPANNING_MATE = 0x2;
+    const TAG_SPLIT_X = 0x4;
+    const TAG_SPLIT = 0x8;
+    const TAG_PROPER = 0x10;
+    const TAG_IMPROPER = 0x20;
+
+    let combinedTag = 0;
+    if (overlap) combinedTag |= TAG_OVERLAP;
+    if (nonSpanningMate) combinedTag |= TAG_NON_SPANNING_MATE;
+    if (splitX) combinedTag |= TAG_SPLIT_X;
+    if (split) combinedTag |= TAG_SPLIT;
+    if (proper) combinedTag |= TAG_PROPER;
+    if (improper) combinedTag |= TAG_IMPROPER;
+
+    return combinedTag;
 }
 
 function MapFlag(readPaired, properPair, secondary, qcFailed, duplicates, supplementary) {
@@ -391,7 +427,7 @@ async function applyFilters(e) {
 }
 
 function Create_Filter_String(filters) {
-    filter_string = `?Flagf=${filters.flagf}&FlagF=${filters.flagF}&minMapQ=${filters.mqThreshold}`;
+    filter_string = `?Flagf=${filters.flagf}&FlagF=${filters.flagF}&Tagf=${filters.tagf}&TagF=${filters.tagF}&minMapQ=${filters.mqThreshold}`;
     if (filters.readgroups) {
         filter_string += `&rg=${[...filters.readgroups].join(',')}`;
     }

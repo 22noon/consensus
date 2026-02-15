@@ -44,16 +44,41 @@
 
                     <!-- Read Filters -->
                     <div class="filter-section">
-                        <h4>Read Filters: <span class="filter-status" id="filter-status"></span></h4>
-                        <label><input type="checkbox" id="filter-duplicates" class="filter-checkbox" > Hide Duplicates</label>
-                        <label><input type="checkbox" id="filter-secondary" class="filter-checkbox" checked> Hide Secondary</label>
-                        <label><input type="checkbox" id="filter-supplementary" class="filter-checkbox" checked> Hide Supplementary</label>
-                        <label><input type="checkbox" id="filter-qcfail" class="filter-checkbox"> Hide QC Failed</label>
-                        <label><input type="checkbox" id="filter-unpaired" class="filter-checkbox"> Hide Unpaired Reads</label>
-                        <label><input type="checkbox" id="filter-improperpair" class="filter-checkbox"> Hide Improper Pairs</label>
+                        <h4>Include: <span class="filter-status" id="filter-status"></span></h4>
+                        <label><input type="checkbox" id="filter-duplicates" class="filter-checkbox" checked > Duplicates</label>
+                        <label><input type="checkbox" id="filter-properpair" class="filter-checkbox"> Proper Pairs</label>
+                        <label><input type="checkbox" id="filter-secondary" class="filter-checkbox" > Secondary</label>
+                        <label><input type="checkbox" id="filter-supplementary" class="filter-checkbox" > Supplementary</label>
+                        <label><input type="checkbox" id="filter-qcfail" class="filter-checkbox"> QC Failed</label>
+                        <label><input type="checkbox" id="filter-paired" class="filter-checkbox"> Paired </label>
+
+                        <label><input type="checkbox" id="filter-tag-overlap" class="filter-checkbox" > overlap</label>
+                        <label><input type="checkbox" id="filter-tag-nonspanningmate" class="filter-checkbox"> mates </label>
+                        <label><input type="checkbox" id="filter-tag-splitx" class="filter-checkbox" > split mates</label>
+                        <label><input type="checkbox" id="filter-tag-split" class="filter-checkbox" > split reads</label>
+                        <label><input type="checkbox" id="filter-tag-proper" class="filter-checkbox"> proper</label>
+                        <label><input type="checkbox" id="filter-tag-improper" class="filter-checkbox"> improper</label>
+
                         <label>
                             MAPQ ≥ <input type="number" id="min-mapq" class="filter-input" value="0" min="0" max="60">
                         </label>
+                    </div>
+                    <!-- Read Retain -->
+                    <div class="filter-section">
+                        <h4>Exclude:</h4>
+                        <label><input type="checkbox" id="retain-duplicates" class="filter-checkbox" > Duplicates</label>
+                        <label><input type="checkbox" id="retain-properpair" class="filter-checkbox"> Proper Pairs</label>
+                        <label><input type="checkbox" id="retain-secondary" class="filter-checkbox" > Secondary</label>
+                        <label><input type="checkbox" id="retain-supplementary" class="filter-checkbox" > Supplementary</label>
+                        <label><input type="checkbox" id="retain-qcfail" class="filter-checkbox"> QC Failed</label>
+                        <label><input type="checkbox" id="retain-paired" class="filter-checkbox"> Paired </label>
+
+                        <label><input type="checkbox" id="retain-tag-overlap" class="filter-checkbox" > overlap</label>
+                        <label><input type="checkbox" id="retain-tag-nonspanningmate" class="filter-checkbox"> mates </label>
+                        <label><input type="checkbox" id="retain-tag-splitx" class="filter-checkbox" > split mates</label>
+                        <label><input type="checkbox" id="retain-tag-split" class="filter-checkbox" > split reads</label>
+                        <label><input type="checkbox" id="retain-tag-proper" class="filter-checkbox"> proper</label>
+                        <label><input type="checkbox" id="retain-tag-improper" class="filter-checkbox"> improper</label>
                     </div>
 
                     <!-- Read Group Options -->

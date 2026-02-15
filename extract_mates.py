@@ -1,5 +1,19 @@
 import pysam
 from collections import defaultdict
+Tag_bits = {
+    'OVERLAP': 0x1,
+    'NON_SPANNING_MATE': 0x2,
+    'SPLITX': 0x4,
+    'SPLIT': 0x8,
+    'PROPER': 0x10,
+    'IMPROPER': 0x20,
+    'READ1': 0x40,
+    'READ2': 0x80,
+    'SECONDARY': 0x100,
+    'QCFAIL': 0x200,
+    'DUPLICATE': 0x400,
+    'SUPPLEMENTARY': 0x800
+}
 
 def parse_sa_tag(sa_string):
 #Parse SA tag to get locations of other alignments
@@ -56,6 +70,7 @@ def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end
         if read.is_unmapped:
             continue
 
+        XO = read.get_tag('XO') if read.has_tag('XO') else 0 
         if read.has_tag('SA'): #Read is split
             other_locations = parse_sa_tag(read.get_tag('SA'))
             for loc in other_locations:
@@ -66,12 +81,12 @@ def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end
             mate_chrom = read.next_reference_name
             mate_pos = read.next_reference_start
             if read.query_name in overlaps:
-                read.set_tag('RG', 'OVERLAP')
+                XO |= Tag_bits['OVERLAP']
             if read.query_name not in mate_regions.keys():
                 mate_regions[read.query_name]=(mate_chrom, mate_pos)
             else:
                 del mate_regions[read.query_name]
-        read = tag_read(read)
+        read = tag_read(read,XO)
         overlap_bam.write(read) 
     
     overlap_bam.close()
@@ -107,6 +122,7 @@ def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end
 
             try:
                 for mate_read in bam.fetch(mate_chrom, max(0, mate_pos - window), mate_pos + window):
+                    XO = mate_read.get_tag('XO') if mate_read.has_tag('XO') else 0 
                     if mate_read.query_name in mates_to_check:
                         expected_chrom, expected_pos = mate_regions.get(mate_read.query_name, (None, None))
                         if expected_chrom is None or expected_pos is None:
@@ -115,15 +131,15 @@ def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end
                             if mate_read.reference_name != expected_chrom or mate_read.reference_start != expected_pos:
                                 continue
                         scan_positions_count[mate_regions[mate_read.query_name]] -= 1
-                        mate_read.set_tag('RG', 'NON_SPANNING_MATE')
-                        mate_read = tag_read(mate_read)
+                        XO |= Tag_bits['NON_SPANNING_MATE']
+                        mate_read = tag_read(mate_read,XO)
                         mate.write(mate_read)
                         mates_to_check.remove(mate_read.query_name)
                     if mate_read.query_name in splits_to_check:
                         split_info = split_reads.get(mate_read.query_name, set())
                         #print(f"Checking split info for {mate_read.query_name}: {split_info} against {mate_read.reference_name}:{mate_read.reference_start +1}")
                         if (mate_read.reference_name, mate_read.reference_start +1 ) in split_info:
-                            mate_read.set_tag('RG', 'SPLITX')
+                            mate_read.set_tag('XO', XO | Tag_bits['SPLITX'])
                             #mate_read = tag_read(mate_read)
                             mate.write(mate_read)
                             splits_to_check.remove(mate_read.query_name)
@@ -160,19 +176,20 @@ def get_pair_orientation(read):
         read1_strand = 'R1' if mate_reverse else 'F1'
         return f"{read1_strand}{read2_strand}"
 
-def tag_read(read):
+def tag_read(read,XO):
     if read.has_tag('SA'):
-        read.set_tag('RG', 'SPLIT')
+        XO |= Tag_bits['SPLIT']
         return read
     orientation = get_pair_orientation(read)
     if read.is_paired:
+        read.set_tag('XR', orientation)
         if orientation != "F1R2" or not read.is_proper_pair:
-            read.set_tag('RG', 'IMPROPER')
-            read.set_tag('RG', orientation)
+            XO |= Tag_bits['IMPROPER']
         else:
-            read.set_tag('RG', 'PROPER')
-    else:
-        read.set_tag('RG', 'UNPAIRED')
+            XO |= Tag_bits['PROPER']
+    #else:
+    #    read.set_tag('RG', 'UNPAIRED')
+    read.set_tag('XO', XO)
     return read
 
 if __name__ == "__main__":
