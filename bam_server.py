@@ -1,7 +1,7 @@
 import hashlib
 import os
 import subprocess
-from flask import Flask, send_from_directory, request, send_file, abort
+from flask import Flask, send_from_directory, request, send_file, abort, Response,request
 import mimetypes
 from pathlib import Path
 
@@ -12,8 +12,72 @@ CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 CACHE_DIR = Path("cache")
 
+def send_file_with_range(path: Path, mimetype="application/octet-stream"):
+    path = Path(path)
+    if not path.exists() or not path.is_file():
+        return Response(status=404)
+
+    file_size = path.stat().st_size
+    range_header = request.headers.get("Range")
+
+    # Always advertise range support
+    def base_headers(length=None):
+        h = {
+            "Accept-Ranges": "bytes",
+            "Content-Type": mimetype,
+            "Cache-Control": "no-cache",
+        }
+        if length is not None:
+            h["Content-Length"] = str(length)
+        return h
+
+    if not range_header:
+        with open(path, "rb") as f:
+            data = f.read()
+        return Response(data, status=200, headers=base_headers(len(data)))
+
+    # Parse Range
+    try:
+        unit, rng = range_header.split("=")
+        if unit.strip().lower() != "bytes":
+            raise ValueError
+        start_str, end_str = rng.split("-")
+        if start_str == "":
+            # suffix range: bytes=-N
+            length = int(end_str)
+            if length <= 0:
+                raise ValueError
+            start = max(0, file_size - length)
+            end = file_size - 1
+        else:
+            start = int(start_str)
+            end = int(end_str) if end_str else file_size - 1
+    except Exception:
+        # Malformed or unsupported → just return full file
+        with open(path, "rb") as f:
+            data = f.read()
+        return Response(data, status=200, headers=base_headers(len(data)))
+
+    # If out of range → return full file (workaround for tiny empty BAMs)
+    if start >= file_size or start < 0 or end < start:
+        with open(path, "rb") as f:
+            data = f.read()
+        return Response(data, status=200, headers=base_headers(len(data)))
+
+    end = min(end, file_size - 1)
+    length = end - start + 1
+
+    with open(path, "rb") as f:
+        f.seek(start)
+        data = f.read(length)
+
+    headers = base_headers(length)
+    headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+    return Response(data, status=206, headers=headers)
+
+
 def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, tag_name="XO"):
-    cmd = ["samtools", "view","-b"]
+    cmd = ["samtools", "view","-b","-h"]
     if Flagf:
         cmd += ["-f", str(Flagf)]
     if FlagF:
@@ -71,7 +135,7 @@ def serve_bam(filename):
     print(f"BAM: Checking cache for BAM: {filename} with key: {cache_key}")
     bam_path = build_filtered_bam(filename, cache_key, rg, Flagf, FlagF, Tagf, TagF)
 
-    return send_file(bam_path, mimetype="application/octet-stream")
+    return send_file_with_range(bam_path)
 
 @app.route("/bai/<filename>")
 def serve_bai(filename):
@@ -91,7 +155,7 @@ def serve_bai(filename):
     if not bam_path.exists() or not bai_path.exists():
         build_filtered_bam(filename, key, rg, Flagf, FlagF, Tagf, TagF)
 
-    return send_file(bai_path, mimetype="application/octet-stream")
+    return send_file_with_range(bai_path)
 
 @app.route('/<path:filename>')
 def serve_file(filename):

@@ -382,7 +382,7 @@ async function applyFilters(e) {
                 url: trackView.track.url,
                 indexURL: (trackView.track.url.replace(/^bam(?=\/|$)/, 'bai')),
                 height: trackView.track.height,
-                defaultColor: trackView.track.config.color || 'rgb(170, 170, 170)',
+                defaultColor: trackView.track.config.color, //|| 'rgb(170, 170, 170)',
                 showCoverage: trackView.track.showCoverage
             });
         }
