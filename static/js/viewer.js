@@ -258,12 +258,12 @@ function getFilterSettings() {
     //const enableRGFilter = document.getElementById('enable-rg-filter').checked;
     //const selectedRG = document.getElementById('read-group-select').value;
     //Exclude
-    qcFailed= document.getElementById('filter-qcfail').checked;
-    duplicated= document.getElementById('filter-duplicates').checked;
-    secondary= document.getElementById('filter-secondary').checked;
-    supplementary= document.getElementById('filter-supplementary').checked;
-    readPaired= document.getElementById('filter-paired').checked;
-    properPair= document.getElementById('filter-properpair').checked;
+    QcFailed= document.getElementById('filter-qcfail').checked;
+    Duplicated= document.getElementById('filter-duplicates').checked;
+    Secondary= document.getElementById('filter-secondary').checked;
+    Supplementary= document.getElementById('filter-supplementary').checked;
+    ReadPaired= document.getElementById('filter-paired').checked;
+    ProperPair= document.getElementById('filter-properpair').checked;
     //Include
     FqcFailed = document.getElementById('retain-qcfail').checked;
     Fduplicated = document.getElementById('retain-duplicates').checked;
@@ -277,8 +277,8 @@ function getFilterSettings() {
     nonSpanningMate = document.getElementById('filter-tag-nonspanningmate').checked;
     splitX = document.getElementById('filter-tag-splitx').checked;
     split = document.getElementById('filter-tag-split').checked;
-    proper = document.getElementById('filter-tag-proper').checked;
-    improper = document.getElementById('filter-tag-improper').checked;
+    Proper = document.getElementById('filter-tag-proper').checked;
+    Improper = document.getElementById('filter-tag-improper').checked;
     //Include
     Foverlap = document.getElementById('retain-tag-overlap').checked;
     FnonSpanningMate = document.getElementById('retain-tag-nonspanningmate').checked;
@@ -289,12 +289,16 @@ function getFilterSettings() {
 
     const filters = {
         mqThreshold: parseInt(document.getElementById('min-mapq').value) || 0,
+        vendorFailed: false,  // Show QC failed reads (default: true = hide them)
+        duplicates: false,    // Show duplicate reads (default: true = hide them)
+        secondary: false,     // Show secondary alignments (default: true = hide them)
+        supplementary: false  // Show supplementary alignments (default: true = hide them)
     };
 
 
-    filters.flagf = MapFlag(readPaired, properPair, secondary, qcFailed, duplicated, supplementary);
+    filters.flagf = MapFlag(ReadPaired, ProperPair, Secondary, QcFailed, Duplicated, Supplementary);
     filters.flagF = MapFlag(FreadPaired, FproperPair, Fsecondary, FqcFailed, Fduplicated, Fsupplementary);
-    filters.tagf = MapTag(overlap, nonSpanningMate, splitX, split, proper, improper);
+    filters.tagf = MapTag(overlap, nonSpanningMate, splitX, split, Proper, Improper);
     filters.tagF = MapTag(Foverlap, FnonSpanningMate, FsplitX, Fsplit, Fproper, Fimproper);
     filters.scThreshold = parseInt(document.getElementById('filter-min-soft-clip').value) || 0;
     filters.scThresholdF = parseInt(document.getElementById('retain-min-soft-clip').value) || 0;
@@ -423,7 +427,7 @@ async function applyFilters(e) {
             height: trackConfig.height,
             viewAsPairs: viewAsPairs,
             showCoverage: trackConfig.showCoverage,
-            //filter: filters
+            filter: filters
         };
 
         // if (trackColor !== 'colorByReadGroup') {
