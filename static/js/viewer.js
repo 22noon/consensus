@@ -22,6 +22,17 @@ let selectedReads = new Set();
 /**
  * Utility Functions
  */
+function showFilterMessage(message) {
+  const toastEl = document.getElementById('filterToast');
+  toastEl.querySelector('.toast-body').textContent = message;
+
+  const toast = new bootstrap.Toast(toastEl, {
+    delay: 2000
+  });
+
+  toast.show();
+}
+
 // function getColorForReadGroup(rgId) {
 //     return rgColorMap[rgId] || 'rgb(170, 170, 170)';
 // }
@@ -277,7 +288,7 @@ function getFilterSettings() {
     Fimproper = document.getElementById('retain-tag-improper').checked;
 
     const filters = {
-        mqThreshold: parseInt(document.getElementById('min-mapq').value) || 0
+        mqThreshold: parseInt(document.getElementById('min-mapq').value) || 0,
     };
 
 
@@ -285,6 +296,8 @@ function getFilterSettings() {
     filters.flagF = MapFlag(FreadPaired, FproperPair, Fsecondary, FqcFailed, Fduplicated, Fsupplementary);
     filters.tagf = MapTag(overlap, nonSpanningMate, splitX, split, proper, improper);
     filters.tagF = MapTag(Foverlap, FnonSpanningMate, FsplitX, Fsplit, Fproper, Fimproper);
+    filters.scThreshold = parseInt(document.getElementById('filter-min-soft-clip').value) || 0;
+    filters.scThresholdF = parseInt(document.getElementById('retain-min-soft-clip').value) || 0;
 
     // if (enableRGFilter && selectedRG) {
     //     console.log("Applying read group filter for RG:", selectedRG);
@@ -350,16 +363,18 @@ function getTrackColor(defaultColor) {
 
 async function applyFilters(e) {
 
-    if (e.target.checked) {
-        id = e.target.id;
-        if (id.startsWith("filter-") || id.startsWith("retain-")) {
-            complementId = id.startsWith("filter-")
-                ? id.replace("filter-", "retain-")
-                : id.replace("retain-", "filter-");
-            complement = document.getElementById(complementId);
-            if (complement.checked) {
-                alert(`Unchecking ${complementId} to avoid conflicting filters.`);
-                complement.checked = false;
+    if (e) {
+        if (e.target.checked) {
+            id = e.target.id;
+            if (id.startsWith("filter-") || id.startsWith("retain-")) {
+                complementId = id.startsWith("filter-")
+                    ? id.replace("filter-", "retain-")
+                    : id.replace("retain-", "filter-");
+                complement = document.getElementById(complementId);
+                if (complement.checked) {
+                    alert(`Unchecking ${complementId} to avoid conflicting filters.`);
+                    complement.checked = false;
+                }
             }
         }
     }
@@ -408,7 +423,7 @@ async function applyFilters(e) {
             height: trackConfig.height,
             viewAsPairs: viewAsPairs,
             showCoverage: trackConfig.showCoverage,
-            filter: filters
+            //filter: filters
         };
 
         // if (trackColor !== 'colorByReadGroup') {
@@ -422,12 +437,14 @@ async function applyFilters(e) {
     }
 
     browser.search(currentLocus);
-    statusEl.textContent = 'Applied';
-    setTimeout(() => { statusEl.textContent = ''; }, 2000);
+    //statusEl.textContent = 'Applied';
+    showFilterMessage("Filters applied ✓");
+    //setTimeout(() => { statusEl.textContent = ''; }, 2000);
 }
 
 function Create_Filter_String(filters) {
-    filter_string = `?Flagf=${filters.flagf}&FlagF=${filters.flagF}&Tagf=${filters.tagf}&TagF=${filters.tagF}&minMapQ=${filters.mqThreshold}`;
+    filter_string = `?Flagf=${filters.flagf}&FlagF=${filters.flagF}&Tagf=${filters.tagf}&TagF=${filters.tagF}&minMapQ=${filters.mqThreshold}&minSoftClip=${filters.scThreshold}&minSoftClipF=${filters.scThresholdF}`;
+    //filter_string = `?Flagf=${filters.flagf}&FlagF=${filters.flagF}&Tagf=${filters.tagf}&TagF=${filters.tagF}&minMapQ=${filters.mqThreshold}`;
     // if (filters.readgroups) {
     //     filter_string += `&rg=${[...filters.readgroups].join(',')}`;
     // }
@@ -440,6 +457,29 @@ function scheduleFilterApplication() {
     if (filterTimeout) clearTimeout(filterTimeout);
     filterTimeout = setTimeout(() => { applyFilters(); }, 500);
 }
+
+// function scheduleSoftClipFilterApplication() {
+//     const statusEl = document.getElementById('filter-status');
+//     statusEl.textContent = 'Pending...';
+//     if (filterTimeout) clearTimeout(filterTimeout);
+//     filterTimeout = setTimeout(() => { applyFilters(); }, 500);
+// }
+
+function scheduleSoftClipFilterApplication() {
+    showFilterMessage("Pending...");
+
+    if (filterTimeout) clearTimeout(filterTimeout);
+
+    filterTimeout = setTimeout(() => {
+        showFilterMessage("Applying filters...");
+        
+        setTimeout(() => {
+            applyFilters();
+            showFilterMessage("Filters applied ✓");
+        }, 0);  // allows UI repaint before heavy work
+    }, 500);
+}
+
 
 /**
  * Navigation Functions
@@ -464,14 +504,16 @@ async function navigateToVariant(variant, flankSize) {
     browser.search(locus);
 
     // Load spanning reads track if enabled
+    //filters = getFilterSettings();
+    filter_string = Create_Filter_String(filters);
     if (showSpanning) {
         //const spanningColor = getTrackColor("rgb(255, 100, 100)");
         const spanningTrackConfig = {
             name: "Spanning Reads Only",
             type: "alignment",
             format: "bam",
-            url: `bam/variant_${variant.chrom}_${variant.pos}`, //?Flagf=${filters.flagf}&FlagF=0`,
-            indexURL: `bai/variant_${variant.chrom}_${variant.pos}`, //?Flagf=${filters.flagf}&FlagF=0`,
+            url: `bam/variant_${variant.chrom}_${variant.pos}${filter_string}`,
+            indexURL: `bai/variant_${variant.chrom}_${variant.pos}${filter_string}`,
             height: 300,
             viewAsPairs: viewAsPairs,
             showCoverage: true,
@@ -537,6 +579,8 @@ function initializeEventListeners() {
 
     // MAPQ threshold
     document.getElementById('min-mapq').addEventListener('input', scheduleFilterApplication);
+    document.getElementById('filter-min-soft-clip').addEventListener('change', scheduleSoftClipFilterApplication);
+    document.getElementById('retain-min-soft-clip').addEventListener('change', scheduleSoftClipFilterApplication);
 
     // Spanning reads toggle
     document.getElementById('show-spanning').addEventListener('change', function () {

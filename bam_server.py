@@ -19,6 +19,8 @@ def send_file_with_range(path: Path, mimetype="application/octet-stream"):
 
     file_size = path.stat().st_size
     range_header = request.headers.get("Range")
+    print(f"Serving file: {path} with MIME type: {mimetype} range: {range_header}")
+
 
     # Always advertise range support
     def base_headers(length=None):
@@ -76,18 +78,31 @@ def send_file_with_range(path: Path, mimetype="application/octet-stream"):
     return Response(data, status=206, headers=headers)
 
 
-def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, tag_name="XO"):
-    cmd = ["samtools", "view","-b","-h"]
-    if Flagf:
-        cmd += ["-f", str(Flagf)]
-    if FlagF:
-        cmd += ["-F", str(FlagF)]
+def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_clip_threshold=0,soft_clip_thresholdF=0):
+    tag_name="XO"
+    FlagF = "0" if FlagF is None else FlagF
+    Flagf = "0" if Flagf is None else Flagf
+    TagF = "0" if TagF is None else TagF
+    Tagf = "0" if Tagf is None else Tagf
+    soft_clip_threshold = "0" if soft_clip_threshold is None else soft_clip_threshold
+    soft_clip_thresholdF = "0" if soft_clip_thresholdF is None else soft_clip_thresholdF
+
+    print(f"Building samtools view command for filename: {filename}, Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold} tag_name: {tag_name}    ")
+    cmd = ["samtools", "view","-b"]
+    if int(Flagf):
+        cmd += ["-f", Flagf]
+    if int(FlagF):
+        cmd += ["-F", FlagF]
     # Custom tag bitmask filtering
     conditions = []
-    if Tagf:
+    if int(Tagf):
         conditions.append(f"([{tag_name}] & {Tagf}) == {Tagf}")
-    if TagF:
+    if int(TagF):
         conditions.append(f"([{tag_name}] & {TagF}) == 0")
+    if int(soft_clip_threshold) > 0:
+        conditions.append(f"([SL] + [SR]) <= {soft_clip_threshold}")
+    if int(soft_clip_thresholdF) > 0:
+        conditions.append(f"([SL] + [SR]) >= {soft_clip_thresholdF}")
 
     if conditions:
         expr = " && ".join(conditions)
@@ -96,20 +111,19 @@ def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, tag_name
     return cmd
 
 
-
-def build_cache_key(filename,rg, Flagf, FlagF, Tagf, TagF):
-    print(f"Building cache key for filename: {filename}, rg: {rg}, Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}")
-    key = f"{filename}|{rg}|{Flagf}|{FlagF}|{Tagf}|{TagF}".encode()
+def build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold,soft_clip_thresholdF):
+    print(f"Building cache key for filename: {filename}, Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold}, soft_clip_thresholdF: {soft_clip_thresholdF}")
+    key = f"{filename}|{Flagf}|{FlagF}|{Tagf}|{TagF}|{soft_clip_threshold}|{soft_clip_thresholdF}".encode()
     return hashlib.md5(key).hexdigest()
 
-def build_filtered_bam(filename,cache_key, rg, Flagf, FlagF, Tagf, TagF):
+def build_filtered_bam(filename,cache_key, Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF):
     filtered_bam = os.path.join(CACHE_DIR, f"{cache_key}.bam")
     filtered_bai = filtered_bam + ".bai"
 
     if os.path.exists(filtered_bam) and os.path.exists(filtered_bai):
         return filtered_bam
 
-    cmd_view = build_samtools_view_cmd(filename, Flagf, FlagF, Tagf, TagF)
+    cmd_view = build_samtools_view_cmd(filename, Flagf, FlagF, Tagf, TagF,soft_clip_threshold,soft_clip_thresholdF)
     print(f"Command: {' '.join(cmd_view)} > {filtered_bam} ")
     with open(filtered_bam, "wb") as out:
         subprocess.run(cmd_view, check=True, stdout=out)
@@ -125,15 +139,16 @@ def root():
 
 @app.route("/bam/<filename>")
 def serve_bam(filename):
-    rg = request.args.get("rg")
     Flagf = request.args.get("Flagf")
     FlagF = request.args.get("FlagF")
     Tagf = request.args.get("Tagf")
     TagF = request.args.get("TagF")
+    soft_clip_threshold = request.args.get("minSoftClip")
+    soft_clip_thresholdF = request.args.get("minSoftClipF")
 
-    cache_key = build_cache_key(filename,rg, Flagf, FlagF, Tagf, TagF)
+    cache_key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF)
     print(f"BAM: Checking cache for BAM: {filename} with key: {cache_key}")
-    bam_path = build_filtered_bam(filename, cache_key, rg, Flagf, FlagF, Tagf, TagF)
+    bam_path = build_filtered_bam(filename, cache_key,  Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF)
 
     return send_file_with_range(bam_path)
 
@@ -144,16 +159,18 @@ def serve_bai(filename):
     FlagF = request.args.get("FlagF")
     Tagf = request.args.get("Tagf")
     TagF = request.args.get("TagF")
+    soft_clip_threshold = request.args.get("minSoftClip")
+    soft_clip_thresholdF = request.args.get("minSoftClipF")
 
 # Compute cache key
-    key = build_cache_key(filename,rg, Flagf, FlagF, Tagf, TagF)
+    key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF)
     bam_path = CACHE_DIR / f"{key}.bam"
     bai_path = CACHE_DIR / f"{key}.bam.bai"
 
     # Ensure BAM and BAI exist — generate on demand!
     print(f"BAI: Checking cache for BAM: {bam_path} and BAI: {bai_path}")
     if not bam_path.exists() or not bai_path.exists():
-        build_filtered_bam(filename, key, rg, Flagf, FlagF, Tagf, TagF)
+        build_filtered_bam(filename, key,  Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF)
 
     return send_file_with_range(bai_path)
 
