@@ -4,7 +4,7 @@ import subprocess
 from flask import Flask, send_from_directory, request, send_file, abort, Response,request
 import mimetypes
 from pathlib import Path
-
+dummy_cache = "22d99d4338cb479ab584c661ead4382a"
 
 app = Flask(__name__)
 
@@ -78,7 +78,7 @@ def send_file_with_range(path: Path, mimetype="application/octet-stream"):
     return Response(data, status=206, headers=headers)
 
 
-def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_clip_threshold=0,soft_clip_thresholdF=0):
+def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_clip_threshold=0,soft_clip_thresholdF=0, edit_distance_threshold=0, edit_distance_thresholdF=0 ):
     tag_name="XO"
     FlagF = "0" if FlagF is None else FlagF
     Flagf = "0" if Flagf is None else Flagf
@@ -86,6 +86,8 @@ def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_cli
     Tagf = "0" if Tagf is None else Tagf
     soft_clip_threshold = "0" if soft_clip_threshold is None else soft_clip_threshold
     soft_clip_thresholdF = "0" if soft_clip_thresholdF is None else soft_clip_thresholdF
+    edit_distance_threshold = "0" if edit_distance_threshold is None else edit_distance_threshold
+    edit_distance_thresholdF = "0" if edit_distance_thresholdF is None else edit_distance_thresholdF
 
     print(f"Building samtools view command for filename: {filename}, Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold} tag_name: {tag_name}    ")
     cmd = ["samtools", "view","-b"]
@@ -103,6 +105,10 @@ def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_cli
         conditions.append(f"([SL] + [SR]) <= {soft_clip_threshold}")
     if int(soft_clip_thresholdF) > 0:
         conditions.append(f"([SL] + [SR]) >= {soft_clip_thresholdF}")
+    if int(edit_distance_threshold) > 0:
+        conditions.append(f"([NM] <= {edit_distance_threshold})")
+    if int(edit_distance_thresholdF) > 0:
+        conditions.append(f"([NM] >= {edit_distance_thresholdF})")
 
     if conditions:
         expr = " && ".join(conditions)
@@ -111,19 +117,20 @@ def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_cli
     return cmd
 
 
-def build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold,soft_clip_thresholdF):
-    print(f"Building cache key for filename: {filename}, Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold}, soft_clip_thresholdF: {soft_clip_thresholdF}")
-    key = f"{filename}|{Flagf}|{FlagF}|{Tagf}|{TagF}|{soft_clip_threshold}|{soft_clip_thresholdF}".encode()
+def build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold,soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF):
+    print(f"Building cache key for filename: {filename}, Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold}, soft_clip_thresholdF: {soft_clip_thresholdF}, edit_distance_threshold: {edit_distance_threshold}, edit_distance_thresholdF: {edit_distance_thresholdF}")
+    key = f"{filename}|{Flagf}|{FlagF}|{Tagf}|{TagF}|{soft_clip_threshold}|{soft_clip_thresholdF}|{edit_distance_threshold}|{edit_distance_thresholdF}".encode()
     return hashlib.md5(key).hexdigest()
 
-def build_filtered_bam(filename,cache_key, Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF):
+def build_filtered_bam(filename,cache_key, Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF):
+    #return os.path.join(CACHE_DIR, f"{dummy_cache}.bam")
     filtered_bam = os.path.join(CACHE_DIR, f"{cache_key}.bam")
     filtered_bai = filtered_bam + ".bai"
 
     if os.path.exists(filtered_bam) and os.path.exists(filtered_bai):
         return filtered_bam
 
-    cmd_view = build_samtools_view_cmd(filename, Flagf, FlagF, Tagf, TagF,soft_clip_threshold,soft_clip_thresholdF)
+    cmd_view = build_samtools_view_cmd(filename, Flagf, FlagF, Tagf, TagF,soft_clip_threshold,soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
     print(f"Command: {' '.join(cmd_view)} > {filtered_bam} ")
     with open(filtered_bam, "wb") as out:
         subprocess.run(cmd_view, check=True, stdout=out)
@@ -143,12 +150,16 @@ def serve_bam(filename):
     FlagF = request.args.get("FlagF")
     Tagf = request.args.get("Tagf")
     TagF = request.args.get("TagF")
-    soft_clip_threshold = request.args.get("minSoftClip")
-    soft_clip_thresholdF = request.args.get("minSoftClipF")
+    soft_clip_threshold = request.args.get("SoftClip")
+    soft_clip_thresholdF = request.args.get("SoftClipF")
+    edit_distance_threshold = request.args.get("EditDistance")
+    edit_distance_thresholdF = request.args.get("EditDistanceF")
+    print(f"Received request for BAM: {filename} with parameters Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold}, soft_clip_thresholdF: {soft_clip_thresholdF}, edit_distance_threshold: {edit_distance_threshold}, edit_distance_thresholdF: {edit_distance_thresholdF}")
 
-    cache_key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF)
+    cache_key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
     print(f"BAM: Checking cache for BAM: {filename} with key: {cache_key}")
-    bam_path = build_filtered_bam(filename, cache_key,  Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF)
+    bam_path = build_filtered_bam(filename, cache_key,  Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
+    print(f"Serving BAM from path: {bam_path}")
 
     return send_file_with_range(bam_path)
 
@@ -159,19 +170,22 @@ def serve_bai(filename):
     FlagF = request.args.get("FlagF")
     Tagf = request.args.get("Tagf")
     TagF = request.args.get("TagF")
-    soft_clip_threshold = request.args.get("minSoftClip")
-    soft_clip_thresholdF = request.args.get("minSoftClipF")
+    soft_clip_threshold = request.args.get("SoftClip")
+    soft_clip_thresholdF = request.args.get("SoftClipF")
+    edit_distance_threshold = request.args.get("EditDistance")
+    edit_distance_thresholdF = request.args.get("EditDistanceF")
+    print(f"Received request for BAi: {filename} with parameters Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold}, soft_clip_thresholdF: {soft_clip_thresholdF}, edit_distance_threshold: {edit_distance_threshold}, edit_distance_thresholdF: {edit_distance_thresholdF}")
 
 # Compute cache key
-    key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF)
+    key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
+    #key = dummy_cache
     bam_path = CACHE_DIR / f"{key}.bam"
     bai_path = CACHE_DIR / f"{key}.bam.bai"
 
     # Ensure BAM and BAI exist — generate on demand!
     print(f"BAI: Checking cache for BAM: {bam_path} and BAI: {bai_path}")
     if not bam_path.exists() or not bai_path.exists():
-        build_filtered_bam(filename, key,  Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF)
-
+        build_filtered_bam(filename, key,  Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
     return send_file_with_range(bai_path)
 
 @app.route('/<path:filename>')
