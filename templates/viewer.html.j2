@@ -57,6 +57,23 @@
         table {
             font-size: 0.85rem;
         }
+
+        #chromTabs {
+            overflow-x: auto;
+            white-space: nowrap;
+            flex-wrap: nowrap;
+        }
+        #chromTabs .nav-item {
+            flex: 0 0 auto;
+        }
+        /* For Bootstrap 5 */
+        .table > tbody > tr.selected > *,
+        .table > tbody > tr.selected:hover > * {
+            --bs-table-bg: #dbeafe !important;
+            --bs-table-hover-bg: #dbeafe !important;
+            background-color: #dbeafe !important;
+        }
+
     </style>
 </head>
 
@@ -69,7 +86,7 @@
     <!-- ================= LEFT PANE ================= -->
     <div class="left-pane">
 
-        <!-- Variant Table -->
+        <!-- Variant Table 
         <div class="card mb-3">
             <div class="card-header py-2">
                 Variants
@@ -88,7 +105,26 @@
                     <tbody id="variant-tbody"></tbody>
                 </table>
             </div>
-        </div>
+        </div> -->
+
+<div class="card shadow-sm mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Variants</strong>
+        <span id="variant-count" class="text-muted small"></span>
+    </div>
+
+    <div class="card-body p-2">
+
+        <!-- Chromosome Tabs -->
+        <ul class="nav nav-tabs" id="chromTabs" role="tablist"></ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content mt-3" id="chromTabContent"></div>
+
+    </div>
+</div>
+
+
         
         <div class="card mb-3 shadow-sm">
             <div class="card-body p-2">
@@ -449,6 +485,7 @@
         const VARIANTS_DATA = {{ variants_json | safe }};
         const READ_GROUPS_DATA = {{ read_groups_json | safe }};
         const INITIAL_LOCUS = "{{ first_locus }}";
+
     </script>
     
     <!-- Main application script -->
