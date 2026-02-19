@@ -2,297 +2,427 @@
 <html>
 <head>
     <title>Interactive Variant Browser</title>
+
     <script src="https://cdn.jsdelivr.net/npm/igv@3.7.3/dist/igv.min.js"></script>
-    <link rel="stylesheet" href="static/css/styles.css">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
+    <style>
+        body {
+            overflow: hidden;
+        }
+
+        .main-container {
+            display: flex;
+            height: 95vh;
+        }
+
+        .left-pane {
+            width: 35%;
+            min-width: 420px;
+            max-width: 600px;
+            overflow-y: auto;
+            border-right: 1px solid #ddd;
+            padding: 15px;
+            background: #f8f9fa;
+        }
+
+        .right-pane {
+            width: 65%;
+            padding: 10px;
+        }
+
+        #igv-div {
+            width: 100%;
+            height: 90vh;
+            border: 1px solid #ddd;
+        }
+
+        .accordion-button {
+            font-size: 0.9rem;
+        }
+
+        .accordion-body {
+            font-size: 0.85rem;
+        }
+
+        .card-subtle {
+            background: #ffffff;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            padding: 10px;
+        }
+
+        table {
+            font-size: 0.85rem;
+        }
+    </style>
 </head>
+
 <body>
-    <h1>Interactive Variant Browser</h1>
-    
-    <div class="container">
-        <!-- Left Pane: Variant Table -->
-        <div class="left-pane">
-            <div class="table-container">
-                <table id="variant-table">
-                    <thead>
+
+<h4 class="p-2">Interactive Variant Browser</h4>
+
+<div class="main-container">
+
+    <!-- ================= LEFT PANE ================= -->
+    <div class="left-pane">
+
+        <!-- Variant Table -->
+        <div class="card mb-3">
+            <div class="card-header py-2">
+                Variants
+            </div>
+
+            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light sticky-top">
                         <tr>
-                            <th>Position</th>
-                            <th>Ref</th>
-                            <th>Alt</th>
-                            <th>Info</th>
+                        <th>Position</th>
+                        <th>Ref</th>
+                        <th>Alt</th>
+                        <th>Info</th>
                         </tr>
                     </thead>
                     <tbody id="variant-tbody"></tbody>
                 </table>
             </div>
-            
-            <!-- Controls Container -->
-            <div class="controls-container">
-                <div class="controls">
-                    <!-- Navigation Controls -->
-                    <div>
-                        <label for="flank-size">Flank Size (bp):</label>
-                        <input type="number" id="flank-size" value="100" min="10" max="1000" step="10">
-                        <label>
-                            <input type="checkbox" id="show-spanning" checked>
-                            Show Spanning Reads Track
+        </div>
+        
+        <div class="card mb-3 shadow-sm">
+            <div class="card-body p-2">
+                <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                    <!-- Flank Size -->
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="flank-size" class="small fw-semibold mb-0">
+                        Flank (bp)
                         </label>
-                        <label>
-                            <input type="checkbox" id="view-as-pairs">
+                        <input type="number"
+                            id="flank-size"
+                            class="form-control form-control-sm"
+                            value="100"
+                            min="10"
+                            max="1000"
+                            step="10"
+                            style="width: 90px;">
+                    </div>
+
+                    <!-- Display Options -->
+                    <div class="d-flex align-items-center gap-3">
+
+                        <div class="form-check mb-0">
+                        <input type="checkbox"
+                                id="show-spanning"
+                                class="form-check-input"
+                                checked>
+                        <label class="form-check-label small">
+                            Spanning Track
+                        </label>
+                        </div>
+
+                        <div class="form-check mb-0">
+                        <input type="checkbox"
+                                id="view-as-pairs"
+                                class="form-check-input">
+                        <label class="form-check-label small">
                             View as Pairs
                         </label>
-                    </div>
-                    <!-- MAPQ -->
-                    <label class="form-label">MAPQ ≥</label>
-                    <input type="number" id="min-mapq"
-                        class="filter-input form-control form-control-sm"
-                        value="0" min="0" max="60">
-
-
-                    <!-- Read Filters -->
-                    <div class="accordion" id="readFilterAccordion">
-                    <!-- ================= By value ================= -->
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                        <button class="accordion-button collapsed"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target="#collapseValue">
-                             Filter value (exclude reads with these properties) (Forbid) 
-                        </button>
-                        </h2>
-
-                        <div id="collapseValue"
-                            class="accordion-collapse collapse"
-                            data-bs-parent="#readFilterAccordion">
-
-                            <div class="accordion-body">
-                                <div class="form-check">
-                                    <input type="number" id="filter-min-soft-clip"
-                                        class="filter-input form-control form-control-sm"
-                                        value="0" min="0" max="60">
-                                    <label class="form-check-label">Min Soft Clip</label>
-                                </div>
-
-                                <div class="form-check">
-                                    <input type="number" id="retain-min-soft-clip"
-                                        class="filter-input form-control form-control-sm"
-                                        value="0" min="0" max="60">
-                                    <label class="form-check-label">Max Soft Clip</label>
-                                </div>
-                            </div>
                         </div>
                     </div>
-                    <!-- ================= INCLUDE ================= -->
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                        <button class="accordion-button collapsed"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target="#collapseInclude">
-                            Include (Require)
-                        </button>
-                        </h2>
-
-                        <div id="collapseInclude"
-                            class="accordion-collapse collapse"
-                            data-bs-parent="#readFilterAccordion">
-
-                            <div class="accordion-body">
-
-                                <!-- ===== FLAGS ===== -->
-                                <h6 class="text-success">Flags</h6>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-duplicates" class="filter-checkbox form-check-input" >
-                                <label class="form-check-label">Duplicates</label>
-                                </div>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-properpair" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">Proper Pairs</label>
-                                </div>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-secondary" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">Secondary</label>
-                                </div>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-supplementary" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">Supplementary</label>
-                                </div>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-qcfail" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">QC Failed</label>
-                                </div>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-paired" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">Paired</label>
-                                </div>
-
-                                <hr>
-
-                                <!-- ===== TAGS ===== -->
-                                <h6 class="text-success">XO Tag Bits</h6>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-tag-overlap" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">overlap</label>
-                                </div>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-tag-nonspanningmate" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">mates</label>
-                                </div>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-tag-splitx" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">split mates</label>
-                                </div>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-tag-split" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">split reads</label>
-                                </div>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-tag-proper" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">proper</label>
-                                </div>
-
-                                <div class="form-check">
-                                <input type="checkbox" id="filter-tag-improper" class="filter-checkbox form-check-input">
-                                <label class="form-check-label">improper</label>
-                                </div>
-
-                            <hr>
-
-                        </div>
-                        </div>
-                    </div>
-
-
-                    <!-- ================= EXCLUDE ================= -->
-                    <div class="accordion-item">
-                        <h2 class="accordion-header">
-                        <button class="accordion-button collapsed"
-                                type="button"
-                                data-bs-toggle="collapse"
-                                data-bs-target="#collapseExclude">
-                            Exclude (Forbid)
-                        </button>
-                        </h2>
-
-                        <div id="collapseExclude"
-                            class="accordion-collapse collapse"
-                            data-bs-parent="#readFilterAccordion">
-
-                        <div class="accordion-body">
-
-                            <!-- ===== FLAGS ===== -->
-                            <h6 class="text-danger">Flags</h6>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-duplicates" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">Duplicates</label>
-                            </div>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-properpair" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">Proper Pairs</label>
-                            </div>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-secondary" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">Secondary</label>
-                            </div>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-supplementary" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">Supplementary</label>
-                            </div>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-qcfail" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">QC Failed</label>
-                            </div>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-paired" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">Paired</label>
-                            </div>
-
-                            <hr>
-
-                            <!-- ===== TAGS ===== -->
-                            <h6 class="text-danger">XO Tag Bits</h6>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-tag-overlap" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">overlap</label>
-                            </div>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-tag-nonspanningmate" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">mates</label>
-                            </div>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-tag-splitx" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">split mates</label>
-                            </div>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-tag-split" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">split reads</label>
-                            </div>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-tag-proper" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">proper</label>
-                            </div>
-
-                            <div class="form-check">
-                            <input type="checkbox" id="retain-tag-improper" class="filter-checkbox form-check-input">
-                            <label class="form-check-label">improper</label>
-                            </div>
-
-                            <h6 class="text-danger">Filter by value</h6>
-                        </div>
-                        </div>
-                    </div>
-
-                    </div>
-
-                    <!-- Read Selection -->
-                    <div class="filter-section">
-                        <h4>Read Selection & Highlighting:</h4>
-                        <p style="font-size: 11px; color: #666; margin: 5px 0;">
-                            Click on read names to search 
-                        </p>
-                        <div>
-                            <input type="text" id="highlight-read-name" placeholder="Enter read name" style="width: 200px;">
-                            <button class="btn" onclick="addReadToList()">Add to List</button>
-                            <button class="btn btn-secondary" onclick="clearReadList()">Clear All</button>
-                            <button class="btn btn-secondary" onclick="clearHighlightedReads()">Clear Highlights</button>
-                        </div>
-                        <div id="highlighted-reads-list"></div>
-                    </div>
-
                 </div>
             </div>
         </div>
-        
-        <!-- Right Pane: IGV Browser -->
-        <div class="right-pane">
-            <div id="igv-div"></div>
-            <div class="toast-container position-fixed bottom-0 end-0 p-3">
 
+
+        <!-- ================= FILTER ACCORDION ================= -->
+        <div class="accordion mb-3" id="readFilterAccordion">
+
+            <!-- ===== VALUE FILTERS ===== -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#collapseValue">
+                        Filter by Value
+                    </button>
+                </h2>
+
+                <div id="collapseValue"
+                     class="accordion-collapse collapse"
+                     data-bs-parent="#readFilterAccordion">
+
+                    <div class="accordion-body">
+                        <div class="card-subtle">
+
+                            <h6 class="mb-2">Soft Clip Length</h6>
+                            <div class="row g-2 mb-3">
+                                <div class="col">
+                                    <label class="form-label small">Min</label>
+                                    <input type="number"
+                                           id="filter-min-soft-clip"
+                                           class="form-control form-control-sm"
+                                           value="0" min="0" max="60">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label small">Max</label>
+                                    <input type="number"
+                                           id="retain-min-soft-clip"
+                                           class="form-control form-control-sm"
+                                           value="0" min="0" max="60">
+                                </div>
+                            </div>
+
+                            <h6 class="mb-2">Edit Distance</h6>
+                            <div class="row g-2">
+                                <div class="col">
+                                    <label class="form-label small">Min</label>
+                                    <input type="number"
+                                           id="filter-min-edit-distance"
+                                           class="form-control form-control-sm"
+                                           value="0" min="0" max="60">
+                                </div>
+                                <div class="col">
+                                    <label class="form-label small">Max</label>
+                                    <input type="number"
+                                           id="retain-max-edit-distance"
+                                           class="form-control form-control-sm"
+                                           value="0" min="0" max="60">
+                                </div>
+                            </div>
+
+                            <h6 class="mb-2">Mapping Quality</h6>
+                            <div class="row g-2">
+                                <div class="col">
+                                    <label class="form-label small">Max</label>
+                                    <input type="number"
+                                           id="min-mapq"
+                                           class="form-control form-control-sm"
+                                           value="0" min="0" max="60">
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== INCLUDE ===== -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#collapseInclude">
+                        Include (Require)
+                    </button>
+                </h2>
+
+                <div id="collapseInclude"
+                     class="accordion-collapse collapse"
+                     data-bs-parent="#readFilterAccordion">
+
+                    <div class="accordion-body">
+
+                        <h6 class="text-success">Flags</h6>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-duplicates" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">Duplicates</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-properpair" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">Proper Pairs</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-secondary" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">Secondary</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-supplementary" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">Supplementary</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-qcfail" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">QC Failed</label>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input type="checkbox" id="filter-paired" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">Paired</label>
+                        </div>
+
+                        <h6 class="text-success">XO Tag Bits</h6>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-tag-overlap" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">overlap</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-tag-nonspanningmate" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">mates</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-tag-splitx" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">split mates</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-tag-split" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">split reads</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-tag-proper" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">proper</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="filter-tag-improper" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">improper</label>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== EXCLUDE ===== -->
+            <div class="accordion-item">
+                <h2 class="accordion-header">
+                    <button class="accordion-button collapsed"
+                            type="button"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#collapseExclude">
+                        Exclude (Forbid)
+                    </button>
+                </h2>
+
+                <div id="collapseExclude"
+                     class="accordion-collapse collapse"
+                     data-bs-parent="#readFilterAccordion">
+
+                    <div class="accordion-body">
+
+                        <h6 class="text-danger">Flags</h6>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-duplicates" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">Duplicates</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-properpair" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">Proper Pairs</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-secondary" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">Secondary</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-supplementary" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">Supplementary</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-qcfail" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">QC Failed</label>
+                        </div>
+
+                        <div class="form-check mb-3">
+                            <input type="checkbox" id="retain-paired" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">Paired</label>
+                        </div>
+
+                        <h6 class="text-danger">XO Tag Bits</h6>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-tag-overlap" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">overlap</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-tag-nonspanningmate" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">mates</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-tag-splitx" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">split mates</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-tag-split" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">split reads</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-tag-proper" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">proper</label>
+                        </div>
+
+                        <div class="form-check">
+                            <input type="checkbox" id="retain-tag-improper" class="filter-checkbox form-check-input">
+                            <label class="form-check-label">improper</label>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="card shadow-sm border-0 mb-3">
+            <div class="card-body p-2">
+
+                <h6 class="fw-bold mb-2">Read Selection</h6>
+
+                <p class="text-muted small mb-2">
+                Click read names in IGV to search or manually add below.
+                </p>
+
+                <!-- Input Row -->
+                <div class="input-group input-group-sm mb-2">
+                <input type="text"
+                        id="highlight-read-name"
+                        class="form-control"
+                        placeholder="Enter read name">
+                <button class="btn btn-primary"
+                        onclick="addReadToList()">Add</button>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="d-flex gap-1 mb-2">
+                <button class="btn btn-outline-secondary btn-sm flex-fill"
+                        onclick="clearReadList()">Clear List</button>
+                <button class="btn btn-outline-secondary btn-sm flex-fill"
+                        onclick="clearHighlightedReads()">Clear Highlights</button>
+                </div>
+
+                <!-- Selected Reads -->
+                <div id="highlighted-reads-list"
+                    class="border rounded p-1 small bg-light"
+                    style="max-height: 120px; overflow-y: auto;">
+                </div>
+
+            </div>
+        </div>
+
+
+
+    </div>
+
+    <!-- ================= RIGHT PANE ================= -->
+    <div class="right-pane">
+        <div id="igv-div"></div>
         <div id="filterToast"
             class="toast align-items-center text-bg-dark border-0"
             role="alert"
@@ -310,11 +440,9 @@
             </div>
 
         </div>
-</div>
-
-        </div>
     </div>
 
+</div>
     <!-- Embed data as JavaScript -->
     <script>
         // Data from Python
@@ -326,5 +454,6 @@
     <!-- Main application script -->
     <script src="static/js/config.js"></script>
     <script src="static/js/viewer.js"></script>
+
 </body>
 </html>

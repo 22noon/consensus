@@ -302,6 +302,8 @@ function getFilterSettings() {
     filters.tagF = MapTag(Foverlap, FnonSpanningMate, FsplitX, Fsplit, Fproper, Fimproper);
     filters.scThreshold = parseInt(document.getElementById('filter-min-soft-clip').value) || 0;
     filters.scThresholdF = parseInt(document.getElementById('retain-min-soft-clip').value) || 0;
+    filters.edThreshold = parseInt(document.getElementById('filter-min-edit-distance').value) || 0;
+    filters.edThresholdF = parseInt(document.getElementById('retain-max-edit-distance').value) || 0;
 
     // if (enableRGFilter && selectedRG) {
     //     console.log("Applying read group filter for RG:", selectedRG);
@@ -418,6 +420,7 @@ async function applyFilters(e) {
     filter_string = Create_Filter_String(filters);
     for (const trackConfig of alignmentTracks) {
         const trackColor = getTrackColor(trackConfig.defaultColor);
+        //const cacheBuster = `&_=${Date.now()}`;
         const newTrackConfig = {
             name: trackConfig.name,
             type: "alignment",
@@ -430,13 +433,6 @@ async function applyFilters(e) {
             filter: filters
         };
 
-        // if (trackColor !== 'colorByReadGroup') {
-        //     newTrackConfig.color = trackColor;
-        // } else {
-        //     newTrackConfig.colorBy = 'tag';
-        //     newTrackConfig.colorByTag = 'RG';
-        // }
-
         await browser.loadTrack(newTrackConfig);
     }
 
@@ -447,11 +443,19 @@ async function applyFilters(e) {
 }
 
 function Create_Filter_String(filters) {
-    filter_string = `?Flagf=${filters.flagf}&FlagF=${filters.flagF}&Tagf=${filters.tagf}&TagF=${filters.tagF}&minMapQ=${filters.mqThreshold}&minSoftClip=${filters.scThreshold}&minSoftClipF=${filters.scThresholdF}`;
-    //filter_string = `?Flagf=${filters.flagf}&FlagF=${filters.flagF}&Tagf=${filters.tagf}&TagF=${filters.tagF}&minMapQ=${filters.mqThreshold}`;
-    // if (filters.readgroups) {
-    //     filter_string += `&rg=${[...filters.readgroups].join(',')}`;
-    // }
+    const params = new URLSearchParams({
+        Flagf: filters.flagf,
+        FlagF: filters.flagF,
+        Tagf: filters.tagf,
+        TagF: filters.tagF,
+        minMapQ: filters.mqThreshold,
+        SoftClip: filters.scThreshold,
+        SoftClipF: filters.scThresholdF,
+        EditDistance: filters.edThreshold,
+        EditDistanceF: filters.edThresholdF
+    });
+
+    filter_string = `?${params.toString()}`;
     return filter_string;
 }
 
@@ -462,12 +466,6 @@ function scheduleFilterApplication() {
     filterTimeout = setTimeout(() => { applyFilters(); }, 500);
 }
 
-// function scheduleSoftClipFilterApplication() {
-//     const statusEl = document.getElementById('filter-status');
-//     statusEl.textContent = 'Pending...';
-//     if (filterTimeout) clearTimeout(filterTimeout);
-//     filterTimeout = setTimeout(() => { applyFilters(); }, 500);
-// }
 
 function scheduleSoftClipFilterApplication() {
     showFilterMessage("Pending...");
@@ -512,6 +510,7 @@ async function navigateToVariant(variant, flankSize) {
     filter_string = Create_Filter_String(filters);
     if (showSpanning) {
         //const spanningColor = getTrackColor("rgb(255, 100, 100)");
+        //const cacheBuster = `&_=${Date.now()}`;
         const spanningTrackConfig = {
             name: "Spanning Reads Only",
             type: "alignment",
@@ -523,13 +522,6 @@ async function navigateToVariant(variant, flankSize) {
             showCoverage: true,
             filter: filters
         };
-
-        // if (spanningColor !== 'colorByReadGroup') {
-        //     spanningTrackConfig.color = spanningColor;
-        // } else {
-        //     spanningTrackConfig.colorBy = 'tag';
-        //     spanningTrackConfig.colorByTag = 'RG';
-        // }
 
         await browser.loadTrack(spanningTrackConfig)
             .then(() => { spanningTrackLoaded = true; })
@@ -556,19 +548,6 @@ function initializeVariantTable() {
 }
 
 function initializeEventListeners() {
-    // Read group filter toggle
-    // document.getElementById('enable-rg-filter').addEventListener('change', function () {
-    //     document.getElementById('read-group-select').disabled = !this.checked;
-    //     if (this.checked) {
-    //         updateReadGroupInfo();
-    //     } else {
-    //         document.getElementById('rg-info').textContent = '';
-    //         document.getElementById('color-indicator').style.backgroundColor = '';
-    //     }
-    // });
-
-    // Read group selection change
-    //document.getElementById('read-group-select').addEventListener('change', updateReadGroupInfo);
 
     // Filter checkboxes
     document.querySelectorAll('.filter-checkbox').forEach(cb => {
@@ -578,13 +557,12 @@ function initializeEventListeners() {
     // View as pairs toggle
     document.getElementById('view-as-pairs').addEventListener('change', applyFilters);
 
-    // Read group select
-    //document.getElementById('read-group-select').addEventListener('change', scheduleFilterApplication);
-
     // MAPQ threshold
     document.getElementById('min-mapq').addEventListener('input', scheduleFilterApplication);
-    document.getElementById('filter-min-soft-clip').addEventListener('change', scheduleSoftClipFilterApplication);
-    document.getElementById('retain-min-soft-clip').addEventListener('change', scheduleSoftClipFilterApplication);
+    document.getElementById('filter-min-soft-clip').addEventListener('change', applyFilters);
+    document.getElementById('retain-min-soft-clip').addEventListener('change', applyFilters);
+    document.getElementById('filter-min-edit-distance').addEventListener('change', applyFilters);
+    document.getElementById('retain-max-edit-distance').addEventListener('change', applyFilters);
 
     // Spanning reads toggle
     document.getElementById('show-spanning').addEventListener('change', function () {
