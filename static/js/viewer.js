@@ -12,12 +12,7 @@ let currentVariant = null;
 let selectedRow = null;
 let filterTimeout = null;
 let selectedReads = new Set();
-
-// Read Group Color Map
-// const rgColorMap = {};
-// readGroups.forEach(rg => {
-//     rgColorMap[rg.id] = rg.color;
-// });
+let VariantList = {}; 
 
 /**
  * Utility Functions
@@ -33,9 +28,6 @@ function showFilterMessage(message) {
   toast.show();
 }
 
-// function getColorForReadGroup(rgId) {
-//     return rgColorMap[rgId] || 'rgb(170, 170, 170)';
-// }
 
 /**
  * Read Selection Functions
@@ -91,6 +83,107 @@ function searchForRead(readName) {
         browser.search(readName);
     } else {
         alert(`Read name copied: ${readName}\nUse IGV's search box to find this read.`);
+    }
+}
+
+/**
+* Manual Variant Functions 
+*/
+
+let manualVariants = {};  // { chrom: Set(positions) }
+
+function addManualVariantRow() {
+    const input = document.getElementById("manual-position-input");
+    const pos = parseInt(input.value);
+    if (!pos || pos <= 0) return;
+
+    const activePane = document.querySelector(".tab-pane.active");
+    if (!activePane) return;
+
+    const chrom = activePane.id ;//activePane.dataset.chrom;
+    const tbody = activePane.querySelector("tbody");
+
+    if (!manualVariants[chrom]) {
+        manualVariants[chrom] = new Set();
+    }
+
+    // Prevent duplicate
+    if (manualVariants[chrom].has(pos) || VariantList[chrom].has(pos)) {
+        alert(`Position ${chrom}:${pos} is already in the variant list.`);
+        input.value = "";
+        return;
+    }
+
+    manualVariants[chrom].add(pos);
+
+    const v = {
+        chrom: chrom,
+        pos: pos,
+        ref: "-",
+        alt: "-",
+        info: "Manual"
+    };
+
+    const row = document.createElement("tr");
+    row.classList.add("manual-row");
+    row.innerHTML = `
+        <td>${v.pos}</td>
+        <td>${v.ref}</td>
+        <td>${v.alt}</td>
+        <td>${v.info}</td>
+    `;
+
+    attachRowClickHandler(row, v);
+
+    insertRowSorted(tbody, row, pos);
+
+    row.click();  // auto select
+    input.value = "";
+}
+
+function insertRowSorted(tbody, row, pos) {
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+
+    for (let r of rows) {
+        const existingPos = parseInt(r.cells[0].innerText);
+        if (pos < existingPos) {
+            tbody.insertBefore(row, r);
+            return;
+        }
+    }
+
+    tbody.appendChild(row);
+}
+
+function attachRowClickHandler(row, variant) {
+    row.onclick = () => {
+
+        if (selectedRow) {
+            selectedRow.classList.remove("selected");
+        }
+
+        row.classList.add("selected");
+        selectedRow = row;
+
+        const flankSize =
+            parseInt(document.getElementById('flank-size').value) || 100;
+
+        navigateToVariant(variant, flankSize);
+    };
+}
+
+function clearManualVariants() {
+    const activePane = document.querySelector(".tab-pane.active");
+    if (!activePane) return;
+
+    const chrom = activePane.id;
+    const tbody = activePane.querySelector("tbody");
+
+    const manualRows = tbody.querySelectorAll(".manual-row");
+    manualRows.forEach(r => r.remove());
+
+    if (manualVariants[chrom]) {
+        manualVariants[chrom].clear();
     }
 }
 
@@ -229,34 +322,11 @@ function handleTrackClick(track, popoverData) {
     }
 }
 
-/**
- * Read Group Functions
- */
-// function updateReadGroupInfo() {
-//     const rgSelect = document.getElementById('read-group-select');
-//     const rgInfo = document.getElementById('rg-info');
-//     const colorIndicator = document.getElementById('color-indicator');
-//     const selectedRG = rgSelect.value;
-
-//     if (!selectedRG) {
-//         rgInfo.textContent = '';
-//         colorIndicator.style.backgroundColor = '';
-//         return;
-//     }
-
-//     const rg = readGroups.find(r => r.id === selectedRG);
-//     if (rg) {
-//         rgInfo.textContent = `Sample: ${rg.sample}, Library: ${rg.library}, Platform: ${rg.platform}`;
-//         colorIndicator.style.backgroundColor = rg.color;
-//     }
-// }
 
 /**
  * Filter Functions
  */
 function getFilterSettings() {
-    //const enableRGFilter = document.getElementById('enable-rg-filter').checked;
-    //const selectedRG = document.getElementById('read-group-select').value;
     //Exclude
     QcFailed= document.getElementById('filter-qcfail').checked;
     Duplicated= document.getElementById('filter-duplicates').checked;
@@ -305,10 +375,6 @@ function getFilterSettings() {
     filters.edThreshold = parseInt(document.getElementById('filter-min-edit-distance').value) || 0;
     filters.edThresholdF = parseInt(document.getElementById('retain-max-edit-distance').value) || 0;
 
-    // if (enableRGFilter && selectedRG) {
-    //     console.log("Applying read group filter for RG:", selectedRG);
-    //     filters.readgroups = new Set([selectedRG]);
-    // }
     console.log("Current filter settings:", filters);
 
     return filters;
@@ -354,16 +420,6 @@ function MapFlag(readPaired, properPair, secondary, qcFailed, duplicates, supple
 }
 
 function getTrackColor(defaultColor) {
-    // const colorByRG = document.getElementById('enable-rg-color').checked;
-    // const filterByRG = document.getElementById('enable-rg-filter').checked;
-    // const selectedRG = document.getElementById('read-group-select').value;
-
-    //if (colorByRG) {
-    //    return 'colorByReadGroup';
-    //}
-    //if (filterByRG && selectedRG) {
-    //    return getColorForReadGroup(selectedRG);
-   // }
     return defaultColor;
 }
 
@@ -384,10 +440,6 @@ async function applyFilters(e) {
             }
         }
     }
-
-
-   // const statusEl = document.getElementById('filter-status');
-   // statusEl.textContent = 'Applying...';
 
     const filters = getFilterSettings();
     const currentLocus = browser.currentLoci()[0];
@@ -551,7 +603,8 @@ function buildVariantTabs(data) {
     // ---- Group by chromosome ----
     const grouped = {};
     data.forEach(v => {
-        if (!grouped[v.chrom]) grouped[v.chrom] = [];
+        if (!grouped[v.chrom]) {grouped[v.chrom] = [];VariantList[v.chrom] = new Set();}
+        VariantList[v.chrom].add(v.pos); 
         grouped[v.chrom].push(v);
     });
 
@@ -573,7 +626,7 @@ function buildVariantTabs(data) {
         btn.className = "nav-link" + (index === 0 ? " active" : "");
         btn.id = `tab-${chrom}`;
         btn.dataset.bsToggle = "tab";
-        btn.dataset.bsTarget = `#pane-${chrom}`;
+        btn.dataset.bsTarget = `#${chrom}`;
         btn.type = "button";
         btn.role = "tab";
         btn.textContent = `${chrom} (${variants.length})`;
@@ -584,7 +637,7 @@ function buildVariantTabs(data) {
         // ---------- Create Tab Pane ----------
         const pane = document.createElement("div");
         pane.className = "tab-pane fade" + (index === 0 ? " show active" : "");
-        pane.id = `pane-${chrom}`;
+        pane.id = `${chrom}`;
         pane.role = "tabpanel";
 
         // Make table scrollable
@@ -713,6 +766,13 @@ async function initializeIGV() {
  */
 document.addEventListener('DOMContentLoaded', async function () {
     console.log("Initializing Interactive Variant Viewer...");
+document
+  .getElementById("manual-position-input")
+  .addEventListener("keydown", function(e) {
+      if (e.key === "Enter") {
+          addManualVariantRow();
+      }
+  });
 
     // Initialize components
     //initializeVariantTable();
