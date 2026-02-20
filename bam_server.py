@@ -1,10 +1,9 @@
 import hashlib
 import os
 import subprocess
-from flask import Flask, send_from_directory, request, send_file, abort, Response,request
+from flask import Flask, send_from_directory, request, send_file, abort, Response,request, jsonify
 import mimetypes
 from pathlib import Path
-dummy_cache = "22d99d4338cb479ab584c661ead4382a"
 
 app = Flask(__name__)
 
@@ -123,7 +122,6 @@ def build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold,soft_
     return hashlib.md5(key).hexdigest()
 
 def build_filtered_bam(filename,cache_key, Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF):
-    #return os.path.join(CACHE_DIR, f"{dummy_cache}.bam")
     filtered_bam = os.path.join(CACHE_DIR, f"{cache_key}.bam")
     filtered_bai = filtered_bam + ".bai"
 
@@ -178,7 +176,6 @@ def serve_bai(filename):
 
 # Compute cache key
     key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
-    #key = dummy_cache
     bam_path = CACHE_DIR / f"{key}.bam"
     bai_path = CACHE_DIR / f"{key}.bam.bai"
 
@@ -213,6 +210,17 @@ def serve_file(filename):
         mimetype = 'text/html'
 
     return send_file(str(requested), mimetype=mimetype or 'application/octet-stream')
+
+@app.route("/extract")
+def extract_bam():
+    Chrom = request.args.get("chrom")
+    Pos = request.args.get("pos")
+    print(f"Received request for BAM: with parameters Chrom: {Chrom}, Pos: {Pos}")
+    if subprocess.run(["bash", "extract_bam.sh", Chrom, Pos], check=False):
+        return jsonify({"success": True,"message": "Task completed",}), 200
+    else:
+        return jsonify({"success": False,"message": "Task failed",}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)

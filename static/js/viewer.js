@@ -5,7 +5,6 @@
 
 // Global State
 const variants = VARIANTS_DATA;
-//const readGroups = READ_GROUPS_DATA;
 let browser;
 let spanningTrackLoaded = false;
 let currentVariant = null;
@@ -86,7 +85,7 @@ function searchForRead(readName) {
     }
 }
 
-/**
+/*
 * Manual Variant Functions 
 */
 
@@ -94,51 +93,76 @@ let manualVariants = {};  // { chrom: Set(positions) }
 
 function addManualVariantRow() {
     const input = document.getElementById("manual-position-input");
-    const pos = parseInt(input.value);
-    if (!pos || pos <= 0) return;
+    const raw = input.value.trim();
+    if (!raw) return;
 
-    const activePane = document.querySelector(".tab-pane.active");
-    if (!activePane) return;
+    // Split by comma, space, or semicolon
+    const positions = raw.split(/[\s,;]+/);
 
-    const chrom = activePane.id ;//activePane.dataset.chrom;
-    const tbody = activePane.querySelector("tbody");
+    for (let posStr of positions) {
+        const pos = parseInt(posStr);
+        if (pos && pos > 0) {
 
-    if (!manualVariants[chrom]) {
-        manualVariants[chrom] = new Set();
+            const activePane = document.querySelector(".tab-pane.active");
+            if (!activePane) return;
+
+            const chrom = activePane.id ;//activePane.dataset.chrom;
+            const tbody = activePane.querySelector("tbody");
+
+            if (!manualVariants[chrom]) {
+                manualVariants[chrom] = new Set();
+            }
+
+            // Prevent duplicate
+            if (manualVariants[chrom].has(pos) || VariantList[chrom].has(pos)) {
+                alert(`Position ${chrom}:${pos} is already in the variant list.`);
+                input.value = "";
+                return;
+            }
+
+            manualVariants[chrom].add(pos);
+
+            const v = {
+                chrom: chrom,
+                pos: pos,
+                ref: "-",
+                alt: "-",
+                info: "Manual"
+            };
+
+            const row = document.createElement("tr");
+            row.classList.add("manual-row");
+            row.innerHTML = `
+                <td>${v.pos}</td>
+                <td>${v.ref}</td>
+                <td>${v.alt}</td>
+                <td>${v.info}</td>
+            `;
+
+            //Send a request to /extract?chrom=chrom&pos=pos to create a temporary BAM with reads spanning this position, then navigate IGV to it
+            fetch(`/extract?chrom=${chrom}&pos=${pos}`)
+                .then(response => {
+                    if (!response.ok) {
+                        console.log(`Extraction request failed with status ${response.status}`);
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    attachRowClickHandler(row, v);
+                    insertRowSorted(tbody, row, pos);
+                    navigateToVariant(v, parseInt(document.getElementById('flank-size').value) || 100);
+                    console.log('Extracted data:', data);
+                    alert('Extraction successful!');
+                })
+                .catch(error => {
+                    console.error('Error during extraction:', error);
+                    alert('Unable to extract reads for this position. Is this out of range?');
+                });
+            row.click();  // auto select
+            input.value = "";
+        }
     }
-
-    // Prevent duplicate
-    if (manualVariants[chrom].has(pos) || VariantList[chrom].has(pos)) {
-        alert(`Position ${chrom}:${pos} is already in the variant list.`);
-        input.value = "";
-        return;
-    }
-
-    manualVariants[chrom].add(pos);
-
-    const v = {
-        chrom: chrom,
-        pos: pos,
-        ref: "-",
-        alt: "-",
-        info: "Manual"
-    };
-
-    const row = document.createElement("tr");
-    row.classList.add("manual-row");
-    row.innerHTML = `
-        <td>${v.pos}</td>
-        <td>${v.ref}</td>
-        <td>${v.alt}</td>
-        <td>${v.info}</td>
-    `;
-
-    attachRowClickHandler(row, v);
-
-    insertRowSorted(tbody, row, pos);
-
-    row.click();  // auto select
-    input.value = "";
 }
 
 function insertRowSorted(tbody, row, pos) {
@@ -489,9 +513,7 @@ async function applyFilters(e) {
     }
 
     browser.search(currentLocus);
-    //statusEl.textContent = 'Applied';
     showFilterMessage("Filters applied ✓");
-    //setTimeout(() => { statusEl.textContent = ''; }, 2000);
 }
 
 function Create_Filter_String(filters) {
@@ -561,8 +583,6 @@ async function navigateToVariant(variant, flankSize) {
     //filters = getFilterSettings();
     filter_string = Create_Filter_String(filters);
     if (showSpanning) {
-        //const spanningColor = getTrackColor("rgb(255, 100, 100)");
-        //const cacheBuster = `&_=${Date.now()}`;
         const spanningTrackConfig = {
             name: "Spanning Reads Only",
             type: "alignment",
@@ -708,10 +728,6 @@ function buildVariantTabs(data) {
     });
 }
 
-// Build on page load
-//document.addEventListener("DOMContentLoaded", () => {
-//    buildVariantTabs(VARIANTS_DATA);
-//});
 
 function initializeEventListeners() {
 
@@ -775,7 +791,6 @@ document
   });
 
     // Initialize components
-    //initializeVariantTable();
     buildVariantTabs(variants);
     initializeEventListeners();
     await initializeIGV();
