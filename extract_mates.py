@@ -30,6 +30,17 @@ def parse_sa_tag(sa_string):
         })
     return parts
 
+def calculate_softclip_lengths(read):
+    cigar_tuples = read.cigartuples
+    left_sc, right_sc = 0, 0
+    if  cigar_tuples:
+        left_sc = cigar_tuples[0][1] if cigar_tuples[0][0] == 4 else 0
+        right_sc = cigar_tuples[-1][1] if cigar_tuples[-1][0] == 4 else 0
+    read.set_tag("SL", left_sc, value_type="i")  # Left soft-clip
+    read.set_tag("SR", right_sc, value_type="i")  # Right soft-clip
+    return read
+
+
 # Usage
 def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end):
     bam = pysam.AlignmentFile(input_bam, "rb")
@@ -87,7 +98,8 @@ def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end
             else:
                 del mate_regions[read.query_name]
         read = tag_read(read,XO)
-        overlap_bam.write(read) 
+# Then add two tags
+        overlap_bam.write(calculate_softclip_lengths(read)) 
     
     overlap_bam.close()
     scan_positions = defaultdict(set)
@@ -133,7 +145,7 @@ def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end
                         scan_positions_count[mate_regions[mate_read.query_name]] -= 1
                         XO |= Tag_bits['NON_SPANNING_MATE']
                         mate_read = tag_read(mate_read,XO)
-                        mate.write(mate_read)
+                        mate.write(calculate_softclip_lengths(mate_read))
                         mates_to_check.remove(mate_read.query_name)
                     if mate_read.query_name in splits_to_check:
                         split_info = split_reads.get(mate_read.query_name, set())
@@ -141,7 +153,7 @@ def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end
                         if (mate_read.reference_name, mate_read.reference_start +1 ) in split_info:
                             mate_read.set_tag('XO', XO | Tag_bits['SPLITX'])
                             #mate_read = tag_read(mate_read)
-                            mate.write(mate_read)
+                            mate.write(calculate_softclip_lengths(mate_read))
                             splits_to_check.remove(mate_read.query_name)
             except pysam.utils.SamtoolsError:
                 pass

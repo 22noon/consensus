@@ -1,11 +1,13 @@
 CHROM=$1
 POS=$2
 echo "Processing ${CHROM}:${POS}"
+if [ -f bam/variant_${CHROM}_${POS}.bam ]; then
+    exit 0
+fi
 SCRIPT_PATH=$(dirname "$(readlink -f "${BASH_SOURCE[0]:-$0}")")
 python $SCRIPT_PATH/extract_mates.py alignment.markdup.bam bam/variant_${CHROM}_${POS}.bam bam/variant_${CHROM}_${POS}.mates.bam "${CHROM}" "${POS}" "${POS}" 
 if [ ! -s bam/variant_${CHROM}_${POS}.mates.bam ]; then
     echo "No mates found for ${CHROM}:${POS}, creating empty BAM"
-    samtools view -H alignment.markdup.bam > bam/variant_${CHROM}_${POS}.mates.bam
 else
     echo "Mates found for ${CHROM}:${POS}, sorting BAM"
     samtools sort -@ 10 -o bam/variant_${CHROM}_${POS}.mates.bam bam/variant_${CHROM}_${POS}.mates.bam

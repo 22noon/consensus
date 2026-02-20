@@ -151,7 +151,7 @@ function addManualVariantRow() {
                 .then(data => {
                     attachRowClickHandler(row, v);
                     insertRowSorted(tbody, row, pos);
-                    navigateToVariant(v, parseInt(document.getElementById('flank-size').value) || 100);
+                    JumptoRow(row, v);
                     console.log('Extracted data:', data);
                     alert('Extraction successful!');
                 })
@@ -182,18 +182,23 @@ function insertRowSorted(tbody, row, pos) {
 function attachRowClickHandler(row, variant) {
     row.onclick = () => {
 
-        if (selectedRow) {
-            selectedRow.classList.remove("selected");
-        }
-
-        row.classList.add("selected");
-        selectedRow = row;
-
-        const flankSize =
-            parseInt(document.getElementById('flank-size').value) || 100;
-
-        navigateToVariant(variant, flankSize);
+        JumptoRow(row, variant);
     };
+}
+
+function JumptoRow(row, variant) {
+    document.querySelectorAll("tr.selected")
+        .forEach(r => r.classList.remove("selected"));
+    if (selectedRow) {
+        selectedRow.classList.remove("selected");
+    }
+
+    row.classList.add("selected");
+    selectedRow = row;
+
+    const flankSize = parseInt(document.getElementById('flank-size').value) || 100;
+
+    navigateToVariant(variant, flankSize);
 }
 
 function clearManualVariants() {
