@@ -1,5 +1,6 @@
 CHROM=$1
 POS=$2
+REF=$3
 echo "Processing ${CHROM}:${POS}"
 if [ -f bam/variant_${CHROM}_${POS}.bam ]; then
     exit 0
@@ -13,10 +14,17 @@ else
     samtools sort -@ 10 -o bam/variant_${CHROM}_${POS}.mates.bam bam/variant_${CHROM}_${POS}.mates.bam
     samtools merge -f -c -o bam/variant_${CHROM}_${POS}.bam.t  bam/variant_${CHROM}_${POS}.bam bam/variant_${CHROM}_${POS}.mates.bam 
     rm bam/variant_${CHROM}_${POS}.mates.bam 
-    mv bam/variant_${CHROM}_${POS}.bam.t bam/variant_${CHROM}_${POS}.bam 
 
-samtools index bam/variant_${CHROM}_${POS}.bam 
-count=$(samtools view -c bam/variant_${CHROM}_${POS}.bam )
+    samtools calmd -b -r bam/variant_${CHROM}_${POS}.bam.t ${REF} > bam/variant_${CHROM}_${POS}.calmd.bam
+    samtools index bam/variant_${CHROM}_${POS}.calmd.bam
+    rm bam/variant_${CHROM}_${POS}.bam.t
+
+    # Annotate:
+    python baq_filter.py --chrom "${CHROM}" --pos "${POS}" --in-bam bam/variant_${CHROM}_${POS}.calmd.bam --out-bam bam/variant_${CHROM}_${POS}.bam --window 2 --primary-only --add-indel-tags
+fi
+
+samtools index bam/variant_${CHROM}_${POS}.bam
+count=$(samtools view -c bam/variant_${CHROM}_${POS}.bam)
 if [ $count -eq 0 ]; then
     ERRORLEVEL=1
 else

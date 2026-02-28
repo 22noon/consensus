@@ -12,6 +12,7 @@ let selectedRow = null;
 let filterTimeout = null;
 let selectedReads = new Set();
 let VariantList = {}; 
+Current = { Chrom: "", Pos: "", Ref: "" };
 
 /**
  * Utility Functions
@@ -139,8 +140,8 @@ function addManualVariantRow() {
                 <td>${v.info}</td>
             `;
 
-            //Send a request to /extract?chrom=chrom&pos=pos to create a temporary BAM with reads spanning this position, then navigate IGV to it
-            fetch(`/extract?chrom=${chrom}&pos=${pos}`)
+            //Send a request to /extract?chrom=chrom&pos=pos&ref=ref to create a temporary BAM with reads spanning this position, then navigate IGV to it
+            fetch(`/extract?chrom=${chrom}&pos=${pos}&ref=${CONFIG.igvOptions.reference.fastaURL}`)
                 .then(response => {
                     if (!response.ok) {
                         console.log(`Extraction request failed with status ${response.status}`);
@@ -153,7 +154,6 @@ function addManualVariantRow() {
                     insertRowSorted(tbody, row, pos);
                     JumptoRow(row, v);
                     console.log('Extracted data:', data);
-                    alert('Extraction successful!');
                 })
                 .catch(error => {
                     console.error('Error during extraction:', error);
@@ -403,7 +403,13 @@ function getFilterSettings() {
     filters.scThresholdF = parseInt(document.getElementById('retain-min-soft-clip').value) || 0;
     filters.edThreshold = parseInt(document.getElementById('filter-min-edit-distance').value) || 0;
     filters.edThresholdF = parseInt(document.getElementById('retain-max-edit-distance').value) || 0;
+    filters.baqThreshold = parseInt(document.getElementById('min-baq').value) || 0;
+    filters.baqThresholdF = parseInt(document.getElementById('max-baq').value) || 0;
 
+    filters.Deletions = document.getElementById('filter-tag-deletions').checked;
+    filters.Insertions = document.getElementById('filter-tag-insertions').checked;
+    filters.DeletionsF = document.getElementById('retain-tag-deletions').checked;
+    filters.InsertionsF = document.getElementById('retain-tag-insertions').checked;
     console.log("Current filter settings:", filters);
 
     return filters;
@@ -498,7 +504,7 @@ async function applyFilters(e) {
     }
 
     // Reload tracks with new filters
-    filter_string = Create_Filter_String(filters);
+    filter_string = Create_Filter_String(Current.Chrom, Current.Pos, filters);
     for (const trackConfig of alignmentTracks) {
         const trackColor = getTrackColor(trackConfig.defaultColor);
         //const cacheBuster = `&_=${Date.now()}`;
@@ -521,8 +527,15 @@ async function applyFilters(e) {
     showFilterMessage("Filters applied ✓");
 }
 
-function Create_Filter_String(filters) {
+function Create_Filter_String(Chrom, pos,filters) {
+    I = filters.Insertions ? "Y" : 
+        filters.InsertionsF ? "N" : "0"
+    D = filters.Deletions ? "Y" :
+        filters.DeletionsF ? "N" : "0"
     const params = new URLSearchParams({
+        Chrom: Chrom,
+        Pos: pos,
+        Ref: CONFIG.igvOptions.reference.fastaURL,
         Flagf: filters.flagf,
         FlagF: filters.flagF,
         Tagf: filters.tagf,
@@ -531,7 +544,11 @@ function Create_Filter_String(filters) {
         SoftClip: filters.scThreshold,
         SoftClipF: filters.scThresholdF,
         EditDistance: filters.edThreshold,
-        EditDistanceF: filters.edThresholdF
+        EditDistanceF: filters.edThresholdF,
+        BAQ: filters.baqThreshold,
+        BAQF: filters.baqThresholdF,
+        Insertions: I,
+        Deletions: D
     });
 
     filter_string = `?${params.toString()}`;
@@ -586,14 +603,15 @@ async function navigateToVariant(variant, flankSize) {
 
     // Load spanning reads track if enabled
     //filters = getFilterSettings();
-    filter_string = Create_Filter_String(filters);
+    Current.Chrom = variant.chrom;Current.Pos = variant.pos;
+    filter_string = Create_Filter_String(variant.chrom, variant.pos, filters);
     if (showSpanning) {
         const spanningTrackConfig = {
             name: "Spanning Reads Only",
             type: "alignment",
             format: "bam",
-            url: `bam/variant_${variant.chrom}_${variant.pos}${filter_string}`,
-            indexURL: `bai/variant_${variant.chrom}_${variant.pos}${filter_string}`,
+            url: `bam${filter_string}`,
+            indexURL: `bai${filter_string}`,
             height: 300,
             viewAsPairs: viewAsPairs,
             showCoverage: true,
@@ -750,6 +768,8 @@ function initializeEventListeners() {
     document.getElementById('retain-min-soft-clip').addEventListener('change', applyFilters);
     document.getElementById('filter-min-edit-distance').addEventListener('change', applyFilters);
     document.getElementById('retain-max-edit-distance').addEventListener('change', applyFilters);
+    document.getElementById('min-baq').addEventListener('change', applyFilters);
+    document.getElementById('max-baq').addEventListener('change', applyFilters);
 
     // Spanning reads toggle
     document.getElementById('show-spanning').addEventListener('change', function () {

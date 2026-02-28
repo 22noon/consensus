@@ -77,7 +77,7 @@ def send_file_with_range(path: Path, mimetype="application/octet-stream"):
     return Response(data, status=206, headers=headers)
 
 
-def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_clip_threshold=0,soft_clip_thresholdF=0, edit_distance_threshold=0, edit_distance_thresholdF=0 ):
+def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_clip_threshold=0,soft_clip_thresholdF=0, edit_distance_threshold=0, edit_distance_thresholdF=0, BAQ=0, BAQF=0, insertions=0, deletions=0):
     tag_name="XO"
     FlagF = "0" if FlagF is None else FlagF
     Flagf = "0" if Flagf is None else Flagf
@@ -87,6 +87,8 @@ def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_cli
     soft_clip_thresholdF = "0" if soft_clip_thresholdF is None else soft_clip_thresholdF
     edit_distance_threshold = "0" if edit_distance_threshold is None else edit_distance_threshold
     edit_distance_thresholdF = "0" if edit_distance_thresholdF is None else edit_distance_thresholdF
+    BAQ = "0" if BAQ is None else BAQ
+    BAQF = "0" if BAQF is None else BAQF
 
     print(f"Building samtools view command for filename: {filename}, Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold} tag_name: {tag_name}    ")
     cmd = ["samtools", "view","-b"]
@@ -108,6 +110,30 @@ def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_cli
         conditions.append(f"([NM] <= {edit_distance_threshold})")
     if int(edit_distance_thresholdF) > 0:
         conditions.append(f"([NM] >= {edit_distance_thresholdF})")
+    if int(BAQ) > 0:
+        conditions.append(f"([XB] >= {BAQ})")
+    if int(BAQF) > 0:
+        conditions.append(f"([XB] <= {BAQF})")
+    if insertions != "0" and deletions != "0":
+        if insertions == "Y" and deletions == "Y":
+            conditions.append(f"([XL] > 0)")
+        elif insertions == "Y" and deletions == "N":
+            conditions.append(f"([XL] > 0) && ([XD] != 1))")
+        elif insertions == "N" and deletions == "Y":
+            conditions.append(f"([XD] == 1)")
+        elif insertions == "N" and deletions == "N":
+            conditions.append(f"([XL] == 0)")
+    else:
+        if insertions != "0":
+            if insertions == "Y":
+                conditions.append(f"([XL] > 0) && ([XD] == 0)")
+            elif insertions == "N":
+                conditions.append(f"([XL] == 0) || ([XD] == 1)")
+        if deletions != "0":
+            if deletions == "Y":
+                conditions.append(f"([XD] == 1)")
+            elif deletions == "N":
+                conditions.append(f"([XD] != 1)")
 
     if conditions:
         expr = " && ".join(conditions)
@@ -116,19 +142,27 @@ def build_samtools_view_cmd(filename, Flagf=0, FlagF=0, Tagf=0, TagF=0, soft_cli
     return cmd
 
 
-def build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold,soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF):
-    print(f"Building cache key for filename: {filename}, Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold}, soft_clip_thresholdF: {soft_clip_thresholdF}, edit_distance_threshold: {edit_distance_threshold}, edit_distance_thresholdF: {edit_distance_thresholdF}")
-    key = f"{filename}|{Flagf}|{FlagF}|{Tagf}|{TagF}|{soft_clip_threshold}|{soft_clip_thresholdF}|{edit_distance_threshold}|{edit_distance_thresholdF}".encode()
+def build_cache_key(filename,Flagf, FlagF, Tagf, TagF,
+                    soft_clip_threshold,soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF, BAQ, BAQF,
+                    insertions, deletions):
+    print(f"Building cache key for filename: {filename}, Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold}, soft_clip_thresholdF: {soft_clip_thresholdF}, edit_distance_threshold: {edit_distance_threshold}, edit_distance_thresholdF: {edit_distance_thresholdF}, BAQ: {BAQ}, BAQF: {BAQF}, insertions: {insertions}, deletions: {deletions}")
+    key = f"{filename}|{Flagf}|{FlagF}|{Tagf}|{TagF}|{soft_clip_threshold}|{soft_clip_thresholdF}|{edit_distance_threshold}|{edit_distance_thresholdF}|{BAQ}|{BAQF}|{insertions}|{deletions}".encode()
     return hashlib.md5(key).hexdigest()
 
-def build_filtered_bam(filename,cache_key, Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF):
+def build_filtered_bam(filename,cache_key, Flagf, FlagF, Tagf, TagF, 
+                       soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF, 
+                       BAQ, BAQF,
+                       insertions, deletions):
     filtered_bam = os.path.join(CACHE_DIR, f"{cache_key}.bam")
     filtered_bai = filtered_bam + ".bai"
 
     if os.path.exists(filtered_bam) and os.path.exists(filtered_bai):
         return filtered_bam
 
-    cmd_view = build_samtools_view_cmd(filename, Flagf, FlagF, Tagf, TagF,soft_clip_threshold,soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
+    cmd_view = build_samtools_view_cmd(filename, Flagf, FlagF, Tagf, TagF,
+                                       soft_clip_threshold,soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF, 
+                                       BAQ, BAQF,
+                                       insertions, deletions)
     print(f"Command: {' '.join(cmd_view)} > {filtered_bam} ")
     with open(filtered_bam, "wb") as out:
         subprocess.run(cmd_view, check=True, stdout=out)
@@ -142,8 +176,16 @@ def build_filtered_bam(filename,cache_key, Flagf, FlagF, Tagf, TagF, soft_clip_t
 def root():
     return app.send_static_file("index.html")
 
-@app.route("/bam/<filename>")
-def serve_bam(filename):
+@app.route("/bam/")
+def serve_bam():
+
+    Chrom = request.args.get("Chrom")
+    Pos = request.args.get("Pos")
+    Ref = request.args.get("Ref")
+    filename = f"variant_{Chrom}_{Pos}"
+    if not Path(f"bam/{filename}.bam").exists():
+        processed_bam(Chrom, Pos, Ref)    
+    
     Flagf = request.args.get("Flagf")
     FlagF = request.args.get("FlagF")
     Tagf = request.args.get("Tagf")
@@ -152,18 +194,26 @@ def serve_bam(filename):
     soft_clip_thresholdF = request.args.get("SoftClipF")
     edit_distance_threshold = request.args.get("EditDistance")
     edit_distance_thresholdF = request.args.get("EditDistanceF")
-    print(f"Received request for BAM: {filename} with parameters Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold}, soft_clip_thresholdF: {soft_clip_thresholdF}, edit_distance_threshold: {edit_distance_threshold}, edit_distance_thresholdF: {edit_distance_thresholdF}")
-
-    cache_key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
+    BAQ = request.args.get("BAQ")
+    BAQF = request.args.get("BAQF")
+    insertions = request.args.get("Insertions")
+    deletions = request.args.get("Deletions")
+    cache_key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF, BAQ, BAQF,insertions,deletions)
     print(f"BAM: Checking cache for BAM: {filename} with key: {cache_key}")
-    bam_path = build_filtered_bam(filename, cache_key,  Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
+    bam_path = build_filtered_bam(filename, cache_key,  Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF,BAQ, BAQF,insertions, deletions)
     print(f"Serving BAM from path: {bam_path}")
 
     return send_file_with_range(bam_path)
 
-@app.route("/bai/<filename>")
-def serve_bai(filename):
-    rg = request.args.get("rg")
+@app.route("/bai")
+def serve_bai():
+    Chrom = request.args.get("Chrom")
+    Pos = request.args.get("Pos")
+    Ref = request.args.get("Ref")
+    filename = f"variant_{Chrom}_{Pos}"
+    if not Path(f"bam/{filename}.bam").exists():
+        processed_bam(Chrom, Pos, Ref)    
+
     Flagf = request.args.get("Flagf")
     FlagF = request.args.get("FlagF")
     Tagf = request.args.get("Tagf")
@@ -172,17 +222,24 @@ def serve_bai(filename):
     soft_clip_thresholdF = request.args.get("SoftClipF")
     edit_distance_threshold = request.args.get("EditDistance")
     edit_distance_thresholdF = request.args.get("EditDistanceF")
-    print(f"Received request for BAi: {filename} with parameters Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold}, soft_clip_thresholdF: {soft_clip_thresholdF}, edit_distance_threshold: {edit_distance_threshold}, edit_distance_thresholdF: {edit_distance_thresholdF}")
+    BAQ = request.args.get("BAQ")
+    BAQF = request.args.get("BAQF")
+    insertions = request.args.get("Insertions")
+    deletions = request.args.get("Deletions")
+    print(f"Received request for BAi: {filename} with parameters Flagf: {Flagf}, FlagF: {FlagF}, Tagf: {Tagf}, TagF: {TagF}, soft_clip_threshold: {soft_clip_threshold}, soft_clip_thresholdF: {soft_clip_thresholdF}, edit_distance_threshold: {edit_distance_threshold}, edit_distance_thresholdF: {edit_distance_thresholdF} BAQ: {BAQ}, BAQF: {BAQF} Insertions: {insertions} Deletions: {deletions}")
 
 # Compute cache key
-    key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
+    key = build_cache_key(filename,Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF, BAQ, BAQF, insertions, deletions)
     bam_path = CACHE_DIR / f"{key}.bam"
     bai_path = CACHE_DIR / f"{key}.bam.bai"
 
     # Ensure BAM and BAI exist — generate on demand!
     print(f"BAI: Checking cache for BAM: {bam_path} and BAI: {bai_path}")
     if not bam_path.exists() or not bai_path.exists():
-        build_filtered_bam(filename, key,  Flagf, FlagF, Tagf, TagF, soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF)
+        build_filtered_bam(filename, key,  Flagf, FlagF, Tagf, TagF, 
+                           soft_clip_threshold, soft_clip_thresholdF, edit_distance_threshold, edit_distance_thresholdF,
+                           BAQ, BAQF,
+                           insertions, deletions)
     return send_file_with_range(bai_path)
 
 @app.route('/<path:filename>')
@@ -211,12 +268,18 @@ def serve_file(filename):
 
     return send_file(str(requested), mimetype=mimetype or 'application/octet-stream')
 
+def processed_bam(Chrom, Pos, Ref):
+    if subprocess.run(["bash", "extract_bam.sh", Chrom, Pos, Ref], check=False):
+        return True
+    return False
+
 @app.route("/extract")
 def extract_bam():
     Chrom = request.args.get("chrom")
     Pos = request.args.get("pos")
-    print(f"Received request for BAM: with parameters Chrom: {Chrom}, Pos: {Pos}")
-    if subprocess.run(["bash", "extract_bam.sh", Chrom, Pos], check=False):
+    Ref = request.args.get("ref")
+    print(f"Received request for BAM: with parameters Chrom: {Chrom}, Pos: {Pos}, Ref: {Ref}")
+    if processed_bam(Chrom, Pos, Ref):
         return jsonify({"success": True,"message": "Task completed",}), 200
     else:
         return jsonify({"success": False,"message": "Task failed",}), 500
