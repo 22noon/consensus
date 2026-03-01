@@ -625,8 +625,21 @@ async function navigateToVariant(variant, flankSize) {
 }
 
 /**
- * Initialization
+ * Tabs 
  */
+function toggleEmptyTabs() {
+    const btn = document.getElementById("toggleEmptyTabs");
+    tabsContainer = document.getElementById("chromTabs");
+    const isShowing = tabsContainer.classList.toggle("show-empty");
+    btn.textContent = isShowing ? "Hide empty chromosomes" : "Show empty chromosomes";
+
+    if (!isShowing) {
+        const firstVisible = tabsContainer.querySelector(".nav-link:not(.tab-empty)");
+        bootstrap?.Tab.getOrCreateInstance(firstVisible)?.show();
+    }
+}
+
+
 function buildVariantTabs(data) {
 
     const tabsContainer = document.getElementById("chromTabs");
@@ -641,15 +654,17 @@ function buildVariantTabs(data) {
         return;
     }
 
-    totalCountEl.textContent = `${data.length} variants`;
 
     // ---- Group by chromosome ----
     const grouped = {};
+    var variantCount = 0;
     data.forEach(v => {
         if (!grouped[v.chrom]) {grouped[v.chrom] = [];VariantList[v.chrom] = new Set();}
         VariantList[v.chrom].add(v.pos); 
+        if (v.pos !== 0) variantCount++;
         grouped[v.chrom].push(v);
     });
+    totalCountEl.textContent = `${variantCount} variants`;
 
     // ---- Natural sort chromosomes ----
     const chroms = Object.keys(grouped).sort((a, b) =>
@@ -671,6 +686,10 @@ function buildVariantTabs(data) {
         btn.id = `tab-${chrom}`;
         btn.dataset.bsToggle = "tab";
         btn.dataset.bsTarget = `#${chrom.replace(/\./g, '\\.')}`;
+        btn.dataset.count = variants.length; // Hide/show empty tabs with CSS
+        if (variants.length === 0) {
+            btn.classList.add("tab-empty");
+        }
         btn.type = "button";
         btn.role = "tab";
         btn.textContent = `${chrom} (${variants.length})`;
@@ -754,6 +773,9 @@ function buildVariantTabs(data) {
 }
 
 
+/**
+ * Initialization
+ */
 function initializeEventListeners() {
 
     // Filter checkboxes
@@ -833,3 +855,4 @@ document
 
     console.log("Initialization complete!");
 });
+
