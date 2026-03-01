@@ -19,12 +19,15 @@ args = parser.parse_args()
 bam_path = args.bam_path
 vcf_path = args.vcf_path
 
-def read_variants_from_vcf(vcf_path):
+def read_variants_from_vcf(vcf_path, sequences):
     """Extract variants from VCF file"""
     vcf = pysam.VariantFile(vcf_path)
     variants = []
+    Seq_in_VCF = []
     
     for record in vcf:
+        if record.chrom not in Seq_in_VCF:
+            Seq_in_VCF.append(record.chrom)
         variants.append({
             'chrom': record.chrom,
             'pos': record.pos,
@@ -34,89 +37,29 @@ def read_variants_from_vcf(vcf_path):
         })
     
     vcf.close()
+    print(f"Found {len(variants)} variants")
+
+    for seq in sequences:
+        if seq['name'] not in Seq_in_VCF:
+            variants.append({
+                'chrom': seq['name'],
+                'pos': 0,
+                'ref': '',
+                'alt': '',
+                'info': ""
+            })
+
     return variants
 
-
-def extract_read_groups(bam_path):
-    """Extract read groups from BAM file and assign colors"""
-    rg_colors = [
-        'rgb(255, 100, 100)',  # Red
-        'rgb(100, 150, 255)',  # Blue
-        'rgb(100, 200, 100)',  # Green
-        'rgb(255, 200, 100)',  # Orange
-        'rgb(200, 100, 255)',  # Purple
-        'rgb(100, 200, 200)',  # Cyan
-        'rgb(255, 150, 200)',  # Pink
-        'rgb(150, 255, 100)',  # Light green
-    ]
-    
+def extract_sequence_names(bam_path):
+    """Extract sequence names from BAM file header"""
     bam = pysam.AlignmentFile(bam_path, "rb")
-    
-    # Add custom read group first
-    read_groups = [
-        {
-            'id': 'SPLIT',
-            'sample': '',
-            'library': 'unknown',
-            'platform': 'ILLUMINA',
-            'color': 'rgb(255, 100, 100)'
-        },
-        {
-            'id': 'NON_SPANNING_MATE',
-            'sample': '',
-            'library': 'unknown',
-            'platform': 'ILLUMINA',
-            'color': 'rgb(255, 100, 100)'
-        },
-        {
-            'id': 'UNPAIRED',
-            'sample': '',
-            'library': 'unknown',
-            'platform': 'ILLUMINA',
-            'color': 'rgb(255, 100, 100)'
-        },
-        {
-            'id': 'IMPROPER',
-            'sample': '',
-            'library': 'unknown',
-            'platform': 'ILLUMINA',
-            'color': 'rgb(255, 100, 100)'
-        },
-        {
-            'id': 'PROPER',
-            'sample': '',
-            'library': 'unknown',
-            'platform': 'ILLUMINA',
-            'color': 'rgb(255, 100, 100)'
-        },
-        {
-            'id': 'OVERLAP',
-            'sample': '',
-            'library': 'unknown',
-            'platform': 'ILLUMINA',
-            'color': 'rgb(255, 100, 100)'
-        }
-    ]
-    
-    # Extract read groups from BAM header
-    color_index = 1
-    if 'RG' in bam.header:
-        for rg in bam.header['RG']:
-            rg_dict = {
-                'id': rg.get('ID', 'unknown'),
-                'sample': rg.get('SM', 'unknown'),
-                'library': rg.get('LB', 'unknown'),
-                'platform': rg.get('PL', 'unknown'),
-                'color': rg_colors[color_index % len(rg_colors)]
-            }
-            read_groups.append(rg_dict)
-            color_index += 1
-    
+    sequences = [{'name': ref['SN'], 'length': ref['LN']} for ref in bam.header['SQ']]
     bam.close()
-    return read_groups
+    return sequences
 
 
-def generate_html(variants, read_groups, output_path, template_dir='templates'):
+def generate_html(variants, sequences, output_path, template_dir='templates'):
     """Generate HTML using Jinja2 template"""
     
     # Get first variant for initial locus
@@ -182,10 +125,9 @@ def generate_html(variants, read_groups, output_path, template_dir='templates'):
     # Render template
     html_content = template.render(
         variants=variants,
-        read_groups=read_groups,
         first_locus=first_locus,
         variants_json=json.dumps(variants),
-        read_groups_json=json.dumps(read_groups)
+        sequences_json=json.dumps(sequences)
     )
     
     # Write output
@@ -199,18 +141,17 @@ def main():
     """Main execution"""
     # Configuration
     output_path = "interactive_variants.html"
+
+    print("Extracting sequences from BAM...")
+    sequences = extract_sequence_names(bam_path)
+    print(f"Found {len(sequences)} sequences")
     
     print("Reading variants from VCF...")
-    variants = read_variants_from_vcf(vcf_path)
-    print(f"Found {len(variants)} variants")
-    
-    print("Extracting read groups from BAM...")
-    read_groups = extract_read_groups(bam_path)
-    print(f"Found {len(read_groups)} read groups")
-    
+    variants = read_variants_from_vcf(vcf_path,sequences)
+
     print("Generating HTML...")
-    generate_html(variants, read_groups, output_path)
-    
+    generate_html(variants, sequences, output_path)
+
     print("Done!")
 
 

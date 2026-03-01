@@ -658,7 +658,8 @@ function buildVariantTabs(data) {
 
     chroms.forEach((chrom, index) => {
 
-        const variants = grouped[chrom];
+        let variants = grouped[chrom];
+        if (variants[0]["pos"] === 0) variants = [];
 
         // ---------- Create Tab ----------
         const li = document.createElement("li");
@@ -709,6 +710,7 @@ function buildVariantTabs(data) {
         variants.forEach(v => {
             const row = document.createElement("tr");
             row.style.cursor = "pointer";
+            if (v.pos === 0) return;
 
             row.innerHTML = `
                 <td>${v.pos}</td>
