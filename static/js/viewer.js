@@ -669,7 +669,7 @@ function buildVariantTabs(data) {
         btn.className = "nav-link" + (index === 0 ? " active" : "");
         btn.id = `tab-${chrom}`;
         btn.dataset.bsToggle = "tab";
-        btn.dataset.bsTarget = `#${chrom}`;
+        btn.dataset.bsTarget = `#${chrom.replace(/\./g, '\\.')}`;
         btn.type = "button";
         btn.role = "tab";
         btn.textContent = `${chrom} (${variants.length})`;
