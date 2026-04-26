@@ -15,9 +15,11 @@ parser.add_argument("--genome-name", help="Genome name/id")
 parser.add_argument("--reference-fasta", help="Reference FASTA path/URL")
 parser.add_argument("--bam-path", default="alignment.markdup.bam", help="BAM file path/URL")
 parser.add_argument("--vcf-path", default="calls.norm.vcf.gz", help="VCF file path/URL")
+parser.add_argument("--output-dir", default=".", help="Output directory for generated HTML and config.js")
 args = parser.parse_args()
 bam_path = args.bam_path
 vcf_path = args.vcf_path
+output_dir = Path(args.output_dir)
 
 def read_variants_from_vcf(vcf_path, sequences):
     """Extract variants from VCF file"""
@@ -59,8 +61,11 @@ def extract_sequence_names(bam_path):
     return sequences
 
 
-def generate_html(variants, sequences, output_path, template_dir='templates'):
+def generate_html(variants, sequences, output_path, template_dir=None):
     """Generate HTML using Jinja2 template"""
+    
+    if template_dir is None:
+        template_dir = str(Path(__file__).parent / "templates")
     
     # Get first variant for initial locus
     first_locus = f"{variants[0]['chrom']}:{variants[0]['pos']}" if variants else "D388-WT_OR813926:1"
@@ -82,17 +87,6 @@ def generate_html(variants, sequences, output_path, template_dir='templates'):
         'reference': reference_info,
         'locus': first_locus,
         'tracks': [
-            # {
-            #     'name': 'All Alignments',
-            #     'type': 'alignment',
-            #     'format': 'bam',
-            #     'url': bam_path,
-            #     'indexURL': f"{bam_path}.bai",
-            #     'height': 300,
-            #     'viewAsPairs': False,
-            #     'showCoverage': True
-            #     # Note: 'filter' is set dynamically in JS via getFilterSettings()
-            # },
             {
                 'name': 'Variants',
                 'type': 'variant',
@@ -105,8 +99,14 @@ def generate_html(variants, sequences, output_path, template_dir='templates'):
 
     # Build config
     config = {
-        'igvOptions': igv_options  # Add igvOptions to config
+        'basePath': "window.location.pathname.split('/')[1]",
+        'igvOptions': igv_options
     }
+    
+    # Convert to JSON and remove quotes around basePath value
+    config_json = json.dumps(config, indent=2)
+    config_json = config_json.replace('"window.location.pathname.split(\'/\')[1]"', "window.location.pathname.split('/')[1]")
+    config = json.loads(config_json)
     
     template_data = {
         'config_json': json.dumps(config, indent=2),
@@ -116,7 +116,7 @@ def generate_html(variants, sequences, output_path, template_dir='templates'):
     # Render config.js
     config_template = env.get_template('config.js.j2')
     config_content = config_template.render(**template_data)
-    with open('static/js/config.js', 'w') as f:
+    with open(str(output_dir / "config.js"), 'w') as f:
         f.write(config_content)
     
     # Setup Jinja2 environment
@@ -140,7 +140,7 @@ def generate_html(variants, sequences, output_path, template_dir='templates'):
 def main():
     """Main execution"""
     # Configuration
-    output_path = "interactive_variants.html"
+    output_path = output_dir / "interactive_variants.html"
 
     print("Extracting sequences from BAM...")
     sequences = extract_sequence_names(bam_path)

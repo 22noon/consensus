@@ -13,6 +13,7 @@ let filterTimeout = null;
 let selectedReads = new Set();
 let VariantList = {}; 
 Current = { Chrom: "", Pos: "", Ref: "" };
+const API_BASE = `/${CONFIG.basePath}`;
 
 /**
  * Utility Functions
@@ -122,6 +123,10 @@ function addManualVariantRow() {
             }
 
             manualVariants[chrom].add(pos);
+            const activeTab = document.querySelector(`#tab-${activePane.id.replace(/\./g, '\\.')}`);
+            activeTab?.classList.remove("tab-empty");
+
+
 
             const v = {
                 chrom: chrom,
@@ -141,7 +146,7 @@ function addManualVariantRow() {
             `;
 
             //Send a request to /extract?chrom=chrom&pos=pos&ref=ref to create a temporary BAM with reads spanning this position, then navigate IGV to it
-            fetch(`/extract?chrom=${chrom}&pos=${pos}&ref=${CONFIG.igvOptions.reference.fastaURL}`)
+            fetch(`${API_BASE}/extract?chrom=${chrom}&pos=${pos}&ref=${CONFIG.igvOptions.reference.fastaURL}`)
                 .then(response => {
                     if (!response.ok) {
                         console.log(`Extraction request failed with status ${response.status}`);
@@ -488,7 +493,7 @@ async function applyFilters(e) {
             alignmentTracks.push({
                 name: trackView.track.name,
                 url: trackView.track.url,
-                indexURL: (trackView.track.url.replace(/^bam(?=\/|$)/, 'bai')),
+                indexURL: trackView.track.url.replace(/\/bam(?=\/|$)/, '/bai'),
                 height: trackView.track.height,
                 //defaultColor: trackView.track.config.color, //|| 'rgb(170, 170, 170)',
                 showCoverage: trackView.track.showCoverage
@@ -512,8 +517,8 @@ async function applyFilters(e) {
             name: trackConfig.name,
             type: "alignment",
             format: "bam",
-            url: trackConfig.url + filter_string,
-            indexURL: trackConfig.indexURL + filter_string,
+            url: `${trackConfig.url}${filter_string}`,
+            indexURL: `${trackConfig.indexURL}${filter_string}`,
             height: trackConfig.height,
             viewAsPairs: viewAsPairs,
             showCoverage: trackConfig.showCoverage,
@@ -610,8 +615,8 @@ async function navigateToVariant(variant, flankSize) {
             name: "Spanning Reads Only",
             type: "alignment",
             format: "bam",
-            url: `bam${filter_string}`,
-            indexURL: `bai${filter_string}`,
+            url: `${API_BASE}/RPV/api/bam${filter_string}`,
+            indexURL: `${API_BASE}/RPV/api/bai${filter_string}`,
             height: 300,
             viewAsPairs: viewAsPairs,
             showCoverage: true,
