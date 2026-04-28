@@ -13,7 +13,8 @@ let filterTimeout = null;
 let selectedReads = new Set();
 let VariantList = {}; 
 Current = { Chrom: "", Pos: "", Ref: "" };
-const API_BASE = `/${CONFIG.basePath}`;
+//const API_BASE = `/${CONFIG.basePath}`;
+const API_BASE = window.location.pathname.replace(/\/[^\/]*$/, '');
 
 /**
  * Utility Functions
@@ -146,7 +147,7 @@ function addManualVariantRow() {
             `;
 
             //Send a request to /extract?chrom=chrom&pos=pos&ref=ref to create a temporary BAM with reads spanning this position, then navigate IGV to it
-            fetch(`${API_BASE}/extract?chrom=${chrom}&pos=${pos}&ref=${CONFIG.igvOptions.reference.fastaURL}`)
+            fetch(`${API_BASE}/api/extract?chrom=${chrom}&pos=${pos}&ref=${CONFIG.igvOptions.reference.fastaURL}`)
                 .then(response => {
                     if (!response.ok) {
                         console.log(`Extraction request failed with status ${response.status}`);
@@ -615,8 +616,8 @@ async function navigateToVariant(variant, flankSize) {
             name: "Spanning Reads Only",
             type: "alignment",
             format: "bam",
-            url: `${API_BASE}/RPV/api/bam${filter_string}`,
-            indexURL: `${API_BASE}/RPV/api/bai${filter_string}`,
+            url: `${API_BASE}/api/bam${filter_string}`,
+            indexURL: `${API_BASE}/api/bai${filter_string}`,
             height: 300,
             viewAsPairs: viewAsPairs,
             showCoverage: true,
