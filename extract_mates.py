@@ -211,7 +211,7 @@ def calculate_softclip_lengths(read):
 
 
 # Usage
-def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end):
+def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end,allele_counts):
     bam = pysam.AlignmentFile(input_bam, "rb")
     header = bam.header.to_dict()
     # Add read group to header
@@ -269,9 +269,10 @@ def process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start,end
         read = tag_read(read,XO)
 
         # Indel tags
-        allele = get_allele_at_base(read, start-1)
-        indels = get_indels_at_base(read, start-1)
+        allele = get_allele_at_base(read, start)
+        indels = get_indels_at_base(read, start)
         signed_len, summary_str, max_del, max_ins = summarise_indels(indels)
+        allele_counts[allele] += 1
 
         read.set_tag("XA", allele,     value_type="Z")
         read.set_tag("XI", signed_len, value_type="i")
@@ -397,4 +398,20 @@ if __name__ == "__main__":
     start = int(sys.argv[5])
     end = int(sys.argv[6])
 
-    process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start, end)
+    allele_counts = defaultdict(int)
+    process_mates_optimized(input_bam, extracted_bam, mate_bam, chrom, start, end, allele_counts)
+    indelstat_output = f"{extracted_bam}.indelstats.txt"
+    total_allele_count = sum(allele_counts.values())
+    with open(indelstat_output, 'w') as f:
+        for allele, count in sorted(allele_counts.items(), key=lambda kv: kv[1], reverse=True):
+            if allele[0] == 'R':
+                allele_type = 'ref'
+            elif allele[0] == 'D':
+                allele_type = 'del'
+            elif allele[0] == 'I':
+                allele_type = 'ins'
+            elif allele[0] == 'M':
+                allele_type = 'snp'
+            else:
+                allele_type = 'other'
+            f.write(f"{allele}\t{count}\t{count/total_allele_count:.4f}\t{allele_type}\n")

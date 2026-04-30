@@ -120,6 +120,14 @@ def build_samtools_view_cmd(serverpath, filename, **params):
         conditions.append(f"([XO] & {params['TagF']}) == 0")
     if int(params.get("EditDistance", 0)):
         conditions.append(f"([NM] <= {params['EditDistance']})")
+
+    xa_filter = params.get("XAFilter", "").strip()
+    if xa_filter:
+        # Reads with no XA tag should pass through — samtools -e will
+        # error on tag absence, so we guard with a type check first.
+        # typeof() returns the SAM type char: 'Z' for string tags.
+        conditions.append(f'[XA] =~ "{xa_filter}"')
+    
     if conditions:
         cmd += ["-e", " && ".join(conditions)]
 
@@ -135,6 +143,7 @@ def build_filtered_bam(serverpath, cache_dir, filename, cache_key, params):
         return bam_path
 
     cmd = build_samtools_view_cmd(serverpath, filename, **params)
+    print ("Running samtools view with command:", " ".join(cmd), flush=True)
     with open(bam_path, "wb") as out:
         subprocess.run(cmd, check=True, stdout=out)
     subprocess.run(["samtools", "index", bam_path], check=True)
@@ -147,10 +156,10 @@ def build_filtered_bam(serverpath, cache_dir, filename, cache_key, params):
 
 @app.route("/<path:browser>/api/bai")
 def serve_bai(browser):
-    print("SERVE_BAI HIT:", browser, flush=True)
     serverpath = DATA_DIR / browser
     cache_dir = CACHE_ROOT / browser
     cache_dir.mkdir(parents=True, exist_ok=True)
+    print("SERVE_BAI HIT:", browser,serverpath,cache_dir, flush=True)
 
     Chrom = request.args.get("Chrom")
     Pos = request.args.get("Pos")
@@ -169,9 +178,10 @@ def serve_bai(browser):
 
 @app.route("/<path:browser>/api/bam")
 def serve_bam(browser):
-    print("SERVE_BAM HIT:", browser, flush=True)
     serverpath = DATA_DIR / browser
     cache_dir = CACHE_ROOT / browser
+
+    print("SERVE_BAM HIT:", browser,serverpath,cache_dir, flush=True)
     cache_dir.mkdir(parents=True, exist_ok=True)
 
     Chrom = request.args.get("Chrom")
@@ -192,15 +202,35 @@ def serve_bam(browser):
 
 @app.route("/<path:browser>/api/extract")
 def extract_bam(browser):
-    print("EXTRACT BAM HIT:", browser, flush=True)
     serverpath = DATA_DIR / browser
+    print("EXTRACT HIT:", browser,serverpath, flush=True)
     Chrom = request.args.get("chrom")
     Pos = request.args.get("pos")
     Ref = request.args.get("ref")
 
+    mock_alleles = []
+
     result = processed_bam(serverpath, Chrom, Pos, Ref)
     if result.returncode == 0:
-        return jsonify({"success": True})
+        stat_file=f"bam/variant_{Chrom}_{Pos}.bam.indelstats.txt"
+        with open(serverpath / stat_file) as f:
+            for line in f:
+                line = line.strip()
+                fields = line.split("\t")
+                xa, count, pct, allele_type = fields[:4]
+                count = int(count)
+                pct = round(float(pct)*100, 2)
+
+                mock_alleles.append({
+                    "xa": xa,
+                    "xd": 0,
+                    "xn": 0,
+                    "count": count,
+                    "pct": pct,
+                    "type": allele_type,
+                })
+
+        return jsonify({"success": True, "alleles": mock_alleles})
     return jsonify({"success": False}), 500
 
 
