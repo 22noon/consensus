@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>IGV.js + Flask Minimal Demo</title>
+  <!-- Use latest IGV.js from jsDelivr; pin a version in production -->
+  <script src="https://cdn.jsdelivr.net/npm/igv/dist/igv.min.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; }
+    #igvDiv { width: 100%; height: 520px; border: 1px solid #ccc; margin-top: 12px; }
+    .row { margin: 6px 0; }
+    input { width: 280px; }
+  </style>
+</head>
+<body>
+  <h2>IGV.js + Flask Minimal Demo</h2>
+
+  <div class="row">
+    <label>Read Group (RG): </label>
+    <input id="rg" placeholder="e.g. RG1" />
+  </div>
+  <div class="row">
+    <label>Custom Tag: </label>
+    <input id="tag" placeholder="e.g. XX:i:1  or  CB:Z:barcode123" />
+  </div>
+  <button id="loadBtn">Load / Reload BAM</button>
+
+  <div id="igvDiv"></div>
+
+  <script>
+    let browser;
+
+    async function createBrowser() {
+      const options = {
+        reference: {
+          id: "custom",
+          name: "D388-WT_OR813926",
+          fastaURL: "D388_WT.fa",
+          indexURL: "D388_WT.fa.fai"
+        },
+        locus: "D388_OR813926:100-200"
+      };
+
+      const igvDiv = document.getElementById("igvDiv");
+      browser = await igv.createBrowser(igvDiv, options);
+    }
+
+    function loadFilteredBam() {
+      const rg = document.getElementById("rg").value.trim();
+      const tag = document.getElementById("tag").value.trim();
+
+      if (!rg && !tag) {
+        alert("Enter at least one filter (RG or custom tag).");
+        return;
+      }
+
+      const bamURL = `/bam/variant_D388-WT_OR813926_10574?rg=${encodeURIComponent(rg)}`
+      const baiURL = `/bai/variant_D388-WT_OR813926_10574?rg=${encodeURIComponent(rg)}`
+
+      // Remove any existing alignment tracks, then add the new one
+      const existing = browser.findTracks("name", "Filtered BAM");
+      existing.forEach(t => browser.removeTrack(t));
+
+      browser.loadTrack({
+        type: "alignment",
+        format: "bam",
+        name: "Filtered BAM",
+        url: bamURL,
+        indexURL: baiURL,
+      });
+    }
+
+    document.getElementById("loadBtn").addEventListener("click", loadFilteredBam);
+    createBrowser();
+  </script>
+</body>
+</html>
