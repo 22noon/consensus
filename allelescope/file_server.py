@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 from flask import Flask, send_from_directory, Response, request, jsonify
+import pysam
 import mimetypes
 import os
 import argparse
 import sys
+import re
 import hashlib
 import subprocess
 from pathlib import Path
@@ -101,39 +103,97 @@ def processed_bam(serverpath, Chrom, Pos, Ref):
     )
 
 
-def build_samtools_view_cmd(serverpath, filename, **params):
+# def build_samtools_view_cmd(serverpath, filename, **params):
+#     bam_file = serverpath / "bam" / f"{filename}.bam"
+#     if not bam_file.exists():
+#         processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"))
+
+#     cmd = ["samtools", "view", "-b"]
+
+#     if int(params.get("Flagf", 0)):
+#         cmd += ["-f", params["Flagf"]]
+#     if int(params.get("FlagF", 0)):
+#         cmd += ["-F", params["FlagF"]]
+
+#     conditions = []
+#     if int(params.get("Tagf", 0)):
+#         conditions.append(f"([XO] & {params['Tagf']}) == {params['Tagf']}")
+#     if int(params.get("TagF", 0)):
+#         conditions.append(f"([XO] & {params['TagF']}) == 0")
+#     if int(params.get("EditDistance", 0)):
+#         conditions.append(f"([NM] <= {params['EditDistance']})")
+
+#     xa_filter = params.get("XAFilter", "").strip()
+#     if xa_filter:
+#         # Reads with no XA tag should pass through — samtools -e will
+#         # error on tag absence, so we guard with a type check first.
+#         # typeof() returns the SAM type char: 'Z' for string tags.
+#         conditions.append(f'[XA] =~ "{xa_filter}"')
+    
+#     if conditions:
+#         cmd += ["-e", " && ".join(conditions)]
+
+#     cmd.append(str(bam_file))
+#     return cmd
+
+
+
+def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
+    """
+    Pure-Python replacement for build_samtools_view_cmd.
+    Returns a list of filtered AlignedSegment reads.
+    """
     bam_file = serverpath / "bam" / f"{filename}.bam"
+    print(f"Getting filtered reads from BAM for {filename} with params {params}", flush=True)
     if not bam_file.exists():
         processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"))
 
-    cmd = ["samtools", "view", "-b"]
-
-    if int(params.get("Flagf", 0)):
-        cmd += ["-f", params["Flagf"]]
-    if int(params.get("FlagF", 0)):
-        cmd += ["-F", params["FlagF"]]
-
-    conditions = []
-    if int(params.get("Tagf", 0)):
-        conditions.append(f"([XO] & {params['Tagf']}) == {params['Tagf']}")
-    if int(params.get("TagF", 0)):
-        conditions.append(f"([XO] & {params['TagF']}) == 0")
-    if int(params.get("EditDistance", 0)):
-        conditions.append(f"([NM] <= {params['EditDistance']})")
-
+    flag_f = int(params.get("Flagf", 0))  # -f: read must have ALL these bits set
+    flag_F = int(params.get("FlagF", 0))  # -F: read must have NONE of these bits set
+    tag_f  = int(params.get("Tagf", 0))   # XO tag: all bits must be set
+    tag_F  = int(params.get("TagF", 0))   # XO tag: all bits must be unset
+    max_nm = int(params.get("EditDistance", 0))
     xa_filter = params.get("XAFilter", "").strip()
-    if xa_filter:
-        # Reads with no XA tag should pass through — samtools -e will
-        # error on tag absence, so we guard with a type check first.
-        # typeof() returns the SAM type char: 'Z' for string tags.
-        conditions.append(f'[XA] =~ "{xa_filter}"')
-    
-    if conditions:
-        cmd += ["-e", " && ".join(conditions)]
 
-    cmd.append(str(bam_file))
-    return cmd
+    reads = []
+    with pysam.AlignmentFile(str(bam_file), "rb") as bam:
+        header = bam.header
+        for read in bam:
+            # -f: skip if read doesn't have ALL required bits
+            if flag_f and (read.flag & flag_f) != flag_f:
+                continue
 
+            # -F: skip if read has ANY of the excluded bits
+            if flag_F and (read.flag & flag_F):
+                continue
+
+            # XO tag inclusion: ([XO] & Tagf) == Tagf
+            if tag_f:
+                xo = read.get_tag("XO") if read.has_tag("XO") else 0
+                if (xo & tag_f) != tag_f:
+                    continue
+
+            # XO tag exclusion: ([XO] & TagF) == 0
+            if tag_F:
+                xo = read.get_tag("XO") if read.has_tag("XO") else 0
+                if (xo & tag_F) != 0:
+                    continue
+
+            # NM (edit distance): [NM] <= EditDistance
+            if max_nm:
+                nm = read.get_tag("NM") if read.has_tag("NM") else 0
+                if nm > max_nm:
+                    continue
+
+            # XA tag regex filter — reads WITHOUT the tag pass through (matching samtools -e behaviour)
+            if xa_filter:
+                if read.has_tag("XA"):
+                    if not re.search(xa_filter, read.get_tag("XA")):
+                        continue
+                # no XA tag → let it through, same as samtools typeof() guard
+
+            reads.append(read)
+    return header, reads
 
 def build_filtered_bam(serverpath, cache_dir, filename, cache_key, params):
     bam_path = cache_dir / f"{cache_key}.bam"
@@ -142,11 +202,11 @@ def build_filtered_bam(serverpath, cache_dir, filename, cache_key, params):
     if bam_path.exists() and bai_path.exists():
         return bam_path
 
-    cmd = build_samtools_view_cmd(serverpath, filename, **params)
-    print ("Running samtools view with command:", " ".join(cmd), flush=True)
-    with open(bam_path, "wb") as out:
-        subprocess.run(cmd, check=True, stdout=out)
-    subprocess.run(["samtools", "index", bam_path], check=True)
+    header, reads = get_filtered_reads_bam(serverpath, filename, **params)
+    with pysam.AlignmentFile(str(bam_path), "wb", header=header) as out:
+        for read in reads:
+            out.write(read)
+    pysam.index(str(bam_path))
     return bam_path
 
 
