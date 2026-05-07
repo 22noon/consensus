@@ -9,6 +9,7 @@ import re
 import hashlib
 import subprocess
 from pathlib import Path
+from process_variant import process_variant
 
 app = Flask(__name__)
 
@@ -94,13 +95,14 @@ def build_cache_key(*args):
     key = "|".join(str(a) for a in args).encode()
     return hashlib.md5(key).hexdigest()
 
-
 def processed_bam(serverpath, Chrom, Pos, Ref):
-    print(f"Processing BAM for {Chrom}:{Pos} ref={Ref}", flush=True)
-    return subprocess.run(
-        ["bash", "extract_bam.sh", Chrom, Pos, Ref, str(serverpath)],
-        check=False
-    )
+    return process_variant(serverpath, Chrom, Pos, Ref)
+# def processed_bam(serverpath, Chrom, Pos, Ref):
+#     print(f"Processing BAM for {Chrom}:{Pos} ref={Ref}", flush=True)
+#     return subprocess.run(
+#         ["bash", "extract_bam.sh", Chrom, Pos, Ref, str(serverpath)],
+#         check=False
+#     )
 
 
 # def build_samtools_view_cmd(serverpath, filename, **params):
@@ -271,7 +273,7 @@ def extract_bam(browser):
     mock_alleles = []
 
     result = processed_bam(serverpath, Chrom, Pos, Ref)
-    if result.returncode == 0:
+    if result == 0:
         stat_file=f"bam/variant_{Chrom}_{Pos}.bam.indelstats.txt"
         with open(serverpath / stat_file) as f:
             for line in f:
