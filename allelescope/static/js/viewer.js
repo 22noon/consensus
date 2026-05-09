@@ -59,11 +59,21 @@ function updateReadList() {
     if (selectedReads.size > 0) {
         const readList = Array.from(selectedReads).map(r =>
             `<div class="read-item">
-                <a href="#" onclick="searchForRead('${r}'); return false;" style="color:#0066cc; text-decoration:none;">${r}</a>
-                <a href="#" onclick="removeRead('${r}'); return false;" style="color:red; text-decoration:none; margin-left:10px;">[✕]</a>
+                <a href="#" onclick="searchForRead('${r}'); return false;" 
+                   style="color:#0066cc; text-decoration:none;">${r}</a>
+                <a href="#" onclick="removeRead('${r}'); return false;" 
+                   style="color:red; text-decoration:none; margin-left:10px;">[✕]</a>
             </div>`
         ).join('');
-        listDiv.innerHTML = `<strong>Selected Reads (${selectedReads.size}):</strong><br>${readList}`;
+        listDiv.innerHTML = `
+            <strong>Selected Reads (${selectedReads.size}):</strong><br>
+            ${readList}
+            <div class="mt-2">
+                <button class="btn btn-sm btn-success w-100" 
+                        onclick="exportSelectedReads()">
+                    ⬇ Export as BAM
+                </button>
+            </div>`;
     } else {
         listDiv.textContent = '';
     }
@@ -88,6 +98,35 @@ function searchForRead(readName) {
     } else {
         alert(`Read name copied: ${readName}\nUse IGV's search box to find this read.`);
     }
+}
+
+async function exportSelectedReads() {
+    if (selectedReads.size === 0) {
+        showFilterMessage("No reads selected");
+        return;
+    }
+
+    showFilterMessage("Extracting reads...");
+
+    // Extract browser path from API_BASE the same way serve_bam receives it
+    const browserPath = API_BASE.replace(/^\//, '');  // strip leading slash
+    const filters = getFilterSettings();
+    const filterString = Create_Filter_String(Current.Chrom, Current.Pos, filters);
+
+    // Step 1: POST the reads, get back a token
+    const tokenResponse = await fetch(`${API_BASE}/api/extract_reads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            reads: [...selectedReads],
+            filterString: filterString,
+            browser: browserPath
+        })
+    });
+    const { token } = await tokenResponse.json();
+
+    // Step 2: GET the file using the token — clean browser download, no blocking
+    window.open(`${API_BASE}/api/extract_reads/${token}`, '_blank');
 }
 
 /*

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-from flask import Flask, send_from_directory, Response, request, jsonify
+import io
+
+from flask import Flask, send_from_directory, Response, request, jsonify,send_file, after_this_request
+import tempfile
+import urllib.parse
+
 import pysam
 import mimetypes
 import os
@@ -7,9 +12,11 @@ import argparse
 import sys
 import re
 import hashlib
-import subprocess
 from pathlib import Path
 from process_variant import process_variant
+import uuid
+import shutil
+
 
 app = Flask(__name__)
 
@@ -20,6 +27,7 @@ args, _ = parser.parse_known_args()
 DATA_DIR = Path(os.path.abspath(args.data_dir))
 CACHE_ROOT = DATA_DIR / "cache"
 CACHE_ROOT.mkdir(exist_ok=True)
+pending_extractions = {} # stack of read extactions pending
 
 if not DATA_DIR.is_dir():
     print(f"DATA_DIR does not exist: {DATA_DIR}", file=sys.stderr)
@@ -93,6 +101,7 @@ def send_file_with_range(path: Path, mimetype="application/octet-stream"):
 
 def build_cache_key(*args):
     key = "|".join(str(a) for a in args).encode()
+    print(f"Cache key: {key}")
     return hashlib.md5(key).hexdigest()
 
 def processed_bam(serverpath, Chrom, Pos, Ref):
@@ -261,6 +270,80 @@ def serve_bam(browser):
 
     return send_file_with_range(bam_path)
 
+@app.route("/<path:browser>/api/extract_reads", methods=["POST"])
+def stage_extract_reads(browser):
+    data = request.get_json()
+    token = str(uuid.uuid4())
+    pending_extractions[token] = {
+        "reads": data.get("reads"),
+        "filterString": data.get("filterString"),
+        "browser": browser
+    }
+    return jsonify({"token": token})
+
+@app.route("/<path:browser>/api/extract_reads/<token>", methods=["GET"])
+def extract_reads(browser, token):
+    pending = pending_extractions.pop(token, None)
+    if not pending:
+        return jsonify({"error": "Invalid or expired token"}), 404
+
+    target_reads = set(pending["reads"])
+    filter_string = pending["filterString"]
+    SIZE_THRESHOLD = 50 * 1024 * 1024  # 50MB
+
+    if not target_reads:
+        return jsonify({"error": "No reads specified"}), 400
+
+    # Parse filter string into an ordered dict, same as request.args.to_dict()
+    params = dict(urllib.parse.parse_qsl(filter_string.lstrip("?"), keep_blank_values=True))
+
+    chrom = params.get("Chrom")
+    pos   = params.get("Pos")
+
+    # Mirror serve_bam exactly
+    filename  = f"variant_{chrom}_{pos}"
+    cache_key = build_cache_key(filename, *params.values())
+    cache_dir = CACHE_ROOT / browser
+    bam_path = cache_dir / f"{cache_key}.bam"
+    print("EXTRACT_READS HIT:", browser, chrom, pos, filter_string, bam_path, flush=True)
+
+    if not bam_path or not os.path.exists(bam_path):
+        return jsonify({"error": "No cached BAM found — navigate to a variant first"}), 404
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        extracted_path = os.path.join(tmpdir, "extracted.bam")
+
+        with pysam.AlignmentFile(bam_path, "rb") as inbam:
+            with pysam.AlignmentFile(extracted_path, "wb", header=inbam.header) as outbam:
+                for read in inbam.fetch(chrom):
+                    if read.query_name in target_reads:
+                        outbam.write(read)
+
+        if os.path.getsize(extracted_path) > SIZE_THRESHOLD:
+            # Small file — safe in memory before tmpdir cleanup
+            with open(extracted_path, "rb") as f:
+                bam_data = io.BytesIO(f.read())
+
+            return send_file(
+                bam_data,
+                mimetype="application/octet-stream",
+                as_attachment=True,
+                download_name=f"selected_reads_{chrom}_{pos}.bam"
+            )
+        else:
+            # Large file — copy outside tmpdir before it's deleted
+            final_path = CACHE_ROOT / browser / f"extract_{chrom}_{pos}_{token}.bam"
+            shutil.copy(extracted_path, final_path)
+
+    # tmpdir safely deleted here, final_path survives
+
+    # Large file — serve from persistent location, cron will clean up
+    return send_file(
+        final_path,
+        mimetype="application/octet-stream",
+        as_attachment=True,
+        download_name=f"selected_reads_{chrom}_{pos}.bam"
+    )
 
 @app.route("/<path:browser>/api/extract")
 def extract_bam(browser):
