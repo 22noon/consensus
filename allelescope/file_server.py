@@ -36,6 +36,15 @@ if not DATA_DIR.is_dir():
 # -----------------------------
 # Helpers (from complex server)
 # -----------------------------
+def escape_xa_filter(xa_filter):
+    """
+    Escape regex metacharacters in XA allele strings for samtools -e.
+    Preserves | as the alternation separator between alleles.
+    """
+    alleles = xa_filter.split("|")
+    escaped = [re.escape(a) for a in alleles]
+    return "|".join(escaped)
+
 
 def get_mimetype(filename):
     mimetype, _ = mimetypes.guess_type(filename)
@@ -164,7 +173,7 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
     tag_f  = int(params.get("Tagf", 0))   # XO tag: all bits must be set
     tag_F  = int(params.get("TagF", 0))   # XO tag: all bits must be unset
     max_nm = int(params.get("EditDistance", 0))
-    xa_filter = params.get("XAFilter", "").strip()
+    xa_filter = escape_xa_filter(params.get("XAFilter", "").strip())
 
     reads = []
     with pysam.AlignmentFile(str(bam_file), "rb") as bam:
@@ -201,6 +210,8 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
                 if read.has_tag("XA"):
                     if not re.search(xa_filter, read.get_tag("XA")):
                         continue
+                else:
+                    continue  # no XA tag → let it through, same as samtools -e guard
                 # no XA tag → let it through, same as samtools typeof() guard
 
             reads.append(read)
