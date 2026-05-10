@@ -1055,6 +1055,23 @@ async function initializeIGV() {
 
     browser = await igv.createBrowser(document.getElementById('igv-div'), igvOptions);
     console.log("IGV browser initialized");
+    // Wire up the slider
+    const slider = document.getElementById('height-slider');
+    const label = document.getElementById('height-value');
+    const originalHeights = browser.trackViews.map(tv => tv.track.height);
+    const originalTotal = originalHeights.reduce((a, b) => a + b, 0);
+
+    slider.addEventListener('input', () => {
+        const newHeight = parseInt(slider.value);
+
+        browser.trackViews.forEach(trackView => {
+            if (trackView.track.name === "Spanning Reads Only") {
+            trackView.setTrackHeight(newHeight);
+            }
+        });
+    });
+
+
 
     // Add track click handler
     browser.on('trackclick', handleTrackClick);

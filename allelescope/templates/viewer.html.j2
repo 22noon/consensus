@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Interactive Variant Browser</title>
+    <title>Allelescope</title>
 
     <script src="https://cdn.jsdelivr.net/npm/igv@3.7.3/dist/igv.min.js"></script>
 
@@ -61,6 +61,36 @@
             padding: 10px;
         }
 
+/* IGV height slider controls Start */
+        #igv-controls {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+        }
+
+
+        #igv-controls label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        #height-slider {
+            width: 100%;
+            margin: 6px 0;
+            cursor: pointer;
+        }
+
+        #height-value {
+            display: inline-block;
+            margin-top: 4px;
+            color: #666;
+            font-size: 12px;
+            font-weight: bold;
+        }
+/* IGV height slider controls End */
+
         table {
             font-size: 0.85rem;
         }
@@ -112,8 +142,8 @@
 <body>
 
 <div class="d-flex align-items-center p-3 mb-3 bg-light border rounded shadow-sm">
-    <i class="bi bi-dna me-2"></i> <!-- requires Bootstrap Icons -->
-    <h4 class="m-0">Interactive Variant Browser</h4>
+    <img src="/static/images/allelescope.png" alt="Allelescope Logo" class="me-2" style="height: 40px;">
+    <h4 class="m-0">Allelescope</h4>
 </div>
 
 
@@ -569,6 +599,11 @@
 
     <!-- ================= RIGHT PANE ================= -->
     <div class="right-pane">
+        <!-- Slider control -->
+        <div id="igv-controls">
+          <input type="range" id="height-slider" min="300" max="1200" value="500" step="1">
+        </div>
+
         <div id="igv-div"></div>
         <div id="filterToast"
             class="toast align-items-center text-bg-dark border-0"
