@@ -1,0 +1,17 @@
+[project]
+name = "allelescope"
+version = "0.1.0"
+description = "Broswer for visually analysing variants"
+authors = [
+    {name = "Chandana Tennakoon"}
+]
+requires-python = ">=3.12"
+dependencies = [
+    "flask (==3.1.2)",
+    "pysam (>=0.24.0,<0.25.0)",
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
