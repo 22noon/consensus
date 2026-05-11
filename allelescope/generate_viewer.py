@@ -23,23 +23,23 @@ output_dir = Path(args.output_dir)
 
 def read_variants_from_vcf(vcf_path, sequences):
     """Extract variants from VCF file"""
-    vcf = pysam.VariantFile(vcf_path)
     variants = []
     Seq_in_VCF = []
-    
-    for record in vcf:
-        if record.chrom not in Seq_in_VCF:
-            Seq_in_VCF.append(record.chrom)
-        variants.append({
-            'chrom': record.chrom,
-            'pos': record.pos,
-            'ref': record.ref,
-            'alt': ','.join([str(a) for a in record.alts]) if record.alts else '',
-            'info': f"DP={record.info.get('DP', 'N/A')}"
-        })
-    
-    vcf.close()
-    print(f"Found {len(variants)} variants")
+    if Path(vcf_path).exists():
+        vcf = pysam.VariantFile(vcf_path)
+        for record in vcf:
+            if record.chrom not in Seq_in_VCF:
+                Seq_in_VCF.append(record.chrom)
+            variants.append({
+                'chrom': record.chrom,
+                'pos': record.pos,
+                'ref': record.ref,
+                'alt': ','.join([str(a) for a in record.alts]) if record.alts else '',
+                'info': f"DP={record.info.get('DP', 'N/A')}"
+            })
+        
+        vcf.close()
+        print(f"Found {len(variants)} variants")
 
     for seq in sequences:
         if seq['name'] not in Seq_in_VCF:
@@ -68,7 +68,7 @@ def generate_html(variants, sequences, output_path, template_dir=None):
         template_dir = str(Path(__file__).parent / "templates")
     
     # Get first variant for initial locus
-    first_locus = f"{variants[0]['chrom']}:{variants[0]['pos']}" if variants else "D388-WT_OR813926:1"
+    first_locus = f"{variants[0]['chrom']}:{variants[0]['pos']}" if variants else f"{sequences[0]['name']}:1"
     
     reference_info = {
             'id': "custom",

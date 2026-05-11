@@ -23,6 +23,7 @@ app = Flask(__name__)
 default_dir = os.path.dirname(os.path.abspath(__file__))
 parser = argparse.ArgumentParser(add_help=False)
 parser.add_argument('--data-dir', '-d', default=default_dir)
+parser.add_argument('--port', type=int, default=8000)
 args, _ = parser.parse_known_args()
 DATA_DIR = Path(os.path.abspath(args.data_dir))
 CACHE_ROOT = DATA_DIR / "cache"
@@ -236,10 +237,15 @@ def build_filtered_bam(serverpath, cache_dir, filename, cache_key, params):
 # BAM/BAI routes (from complex server)
 # -----------------------------
 
+@app.route("/api/bai")
 @app.route("/<path:browser>/api/bai")
-def serve_bai(browser):
-    serverpath = DATA_DIR / browser
-    cache_dir = CACHE_ROOT / browser
+def serve_bai(browser=None):
+    if browser is None:
+        serverpath = DATA_DIR          # default location
+        cache_dir = CACHE_ROOT 
+    else:
+        serverpath = DATA_DIR / browser
+        cache_dir = CACHE_ROOT / browser
     cache_dir.mkdir(parents=True, exist_ok=True)
     print("SERVE_BAI HIT:", browser,serverpath,cache_dir, flush=True)
 
@@ -258,10 +264,15 @@ def serve_bai(browser):
     return send_file_with_range(bai_path)
 
 
+@app.route("/api/bam")
 @app.route("/<path:browser>/api/bam")
-def serve_bam(browser):
-    serverpath = DATA_DIR / browser
-    cache_dir = CACHE_ROOT / browser
+def serve_bam(browser=None):
+    if browser is None:
+        serverpath = DATA_DIR          # default location
+        cache_dir = CACHE_ROOT 
+    else:
+        serverpath = DATA_DIR / browser
+        cache_dir = CACHE_ROOT / browser
 
     print("SERVE_BAM HIT:", browser,serverpath,cache_dir, flush=True)
     cache_dir.mkdir(parents=True, exist_ok=True)
@@ -281,8 +292,9 @@ def serve_bam(browser):
 
     return send_file_with_range(bam_path)
 
+@app.route("/api/extract_reads", methods=["POST"])
 @app.route("/<path:browser>/api/extract_reads", methods=["POST"])
-def stage_extract_reads(browser):
+def stage_extract_reads(browser=None):
     data = request.get_json()
     token = str(uuid.uuid4())
     pending_extractions[token] = {
@@ -292,8 +304,9 @@ def stage_extract_reads(browser):
     }
     return jsonify({"token": token})
 
+@app.route("/api/extract_reads/<token>", methods=["GET"])
 @app.route("/<path:browser>/api/extract_reads/<token>", methods=["GET"])
-def extract_reads(browser, token):
+def extract_reads(browser=None, token=None):
     pending = pending_extractions.pop(token, None)
     if not pending:
         return jsonify({"error": "Invalid or expired token"}), 404
@@ -356,9 +369,14 @@ def extract_reads(browser, token):
         download_name=f"selected_reads_{chrom}_{pos}.bam"
     )
 
+@app.route("/api/extract")
 @app.route("/<path:browser>/api/extract")
-def extract_bam(browser):
-    serverpath = DATA_DIR / browser
+def extract_bam(browser=None):
+
+    if browser is None:
+        serverpath = DATA_DIR          # default location
+    else:
+        serverpath = DATA_DIR / browser
     print("EXTRACT HIT:", browser,serverpath, flush=True)
     Chrom = request.args.get("chrom")
     Pos = request.args.get("pos")
@@ -405,4 +423,4 @@ def serve_file(filename):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8000, debug=True)#
+    app.run(host='0.0.0.0', port=args.port, debug=True)
