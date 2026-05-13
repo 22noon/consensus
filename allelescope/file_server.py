@@ -413,13 +413,41 @@ def extract_bam(browser=None):
 # -----------------------------
 
 @app.route('/')
-def index():
-    return send_from_directory(DATA_DIR, 'interactive_viewer.html')
+@app.route("/<path:browser>")
+def index(browser=None):
+    if browser is None:
+        serverpath = DATA_DIR
+    else:
+        serverpath = DATA_DIR / browser
+
+    # If it's a directory, serve the HTML file from within it
+    if serverpath.is_dir():
+        print("INDEX HIT:", browser, serverpath, flush=True)
+        return send_from_directory(serverpath, 'interactive_variants.html')
+
+    # Otherwise treat it as a file request
+    print("FILE HIT:", DATA_DIR, browser, flush=True)
+    return send_from_directory(DATA_DIR, browser, mimetype=get_mimetype(browser))
+
+# @app.route('/')
+# @app.route("/<path:browser>/",strict_slashes=False)
+# def index(browser=None):
+#     print("INDEX HIT:", browser, DATA_DIR, flush=True)
+#     if browser is None:
+#         serverpath = DATA_DIR          # default location
+#     else:
+#         serverpath = DATA_DIR / browser
+#     return send_from_directory(serverpath, 'interactive_variants.html')
+
+# @app.route('/')
+# def index():
+#    return send_from_directory(DATA_DIR, 'interactive_viewer.html')
 
 
-@app.route('/<path:filename>')
-def serve_file(filename):
-    return send_from_directory(DATA_DIR, filename, mimetype=get_mimetype(filename))
+# @app.route('/<path:filename>')
+# def serve_file(filename):
+#     print("FILE HIT:", DATA_DIR, filename,flush=True)
+#     return send_from_directory(DATA_DIR, filename, mimetype=get_mimetype(filename))
 
 
 if __name__ == '__main__':
