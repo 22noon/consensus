@@ -116,47 +116,6 @@ def build_cache_key(*args):
 
 def processed_bam(serverpath, Chrom, Pos, Ref):
     return process_variant(serverpath, Chrom, Pos, Ref)
-# def processed_bam(serverpath, Chrom, Pos, Ref):
-#     print(f"Processing BAM for {Chrom}:{Pos} ref={Ref}", flush=True)
-#     return subprocess.run(
-#         ["bash", "extract_bam.sh", Chrom, Pos, Ref, str(serverpath)],
-#         check=False
-#     )
-
-
-# def build_samtools_view_cmd(serverpath, filename, **params):
-#     bam_file = serverpath / "bam" / f"{filename}.bam"
-#     if not bam_file.exists():
-#         processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"))
-
-#     cmd = ["samtools", "view", "-b"]
-
-#     if int(params.get("Flagf", 0)):
-#         cmd += ["-f", params["Flagf"]]
-#     if int(params.get("FlagF", 0)):
-#         cmd += ["-F", params["FlagF"]]
-
-#     conditions = []
-#     if int(params.get("Tagf", 0)):
-#         conditions.append(f"([XO] & {params['Tagf']}) == {params['Tagf']}")
-#     if int(params.get("TagF", 0)):
-#         conditions.append(f"([XO] & {params['TagF']}) == 0")
-#     if int(params.get("EditDistance", 0)):
-#         conditions.append(f"([NM] <= {params['EditDistance']})")
-
-#     xa_filter = params.get("XAFilter", "").strip()
-#     if xa_filter:
-#         # Reads with no XA tag should pass through — samtools -e will
-#         # error on tag absence, so we guard with a type check first.
-#         # typeof() returns the SAM type char: 'Z' for string tags.
-#         conditions.append(f'[XA] =~ "{xa_filter}"')
-    
-#     if conditions:
-#         cmd += ["-e", " && ".join(conditions)]
-
-#     cmd.append(str(bam_file))
-#     return cmd
-
 
 
 def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
@@ -164,8 +123,8 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
     Pure-Python replacement for build_samtools_view_cmd.
     Returns a list of filtered AlignedSegment reads.
     """
-    bam_file = serverpath / "bam" / f"{filename}.bam"
-    print(f"Getting filtered reads from BAM for {filename} with params {params}", flush=True)
+    bam_file = serverpath / "bam" / f"{filename}.calmd.bam"
+    print(f"Getting filtered reads from BAM for {filename} with params {params} from {bam_file}", flush=True)
     if not bam_file.exists():
         processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"))
 
@@ -174,7 +133,10 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
     tag_f  = int(params.get("Tagf", 0))   # XO tag: all bits must be set
     tag_F  = int(params.get("TagF", 0))   # XO tag: all bits must be unset
     max_nm = int(params.get("EditDistance", 0))
+    #xa_filter = escape_xa_filter(params.get("XAFilter", "").strip())
     xa_filter = escape_xa_filter(params.get("XAFilter", "").strip())
+    xa_set = set(xa_filter.split("|")) if xa_filter else None
+
 
     reads = []
     with pysam.AlignmentFile(str(bam_file), "rb") as bam:
@@ -206,14 +168,15 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
                 if nm > max_nm:
                     continue
 
-            # XA tag regex filter — reads WITHOUT the tag pass through (matching samtools -e behaviour)
+            # XA tag regex filter 
             if xa_filter:
                 if read.has_tag("XA"):
-                    if not re.search(xa_filter, read.get_tag("XA")):
+                    xa = read.get_tag("XA")
+                    if xa not in xa_set:
                         continue
+                    # replaced the regex version as complicated to replace exact matches with escapes : if not re.search(xa_filter, read.get_tag("XA")):
                 else:
                     continue  # no XA tag → let it through, same as samtools -e guard
-                # no XA tag → let it through, same as samtools typeof() guard
 
             reads.append(read)
     return header, reads
@@ -282,7 +245,7 @@ def serve_bam(browser=None):
     Ref = request.args.get("Ref")
     filename = f"variant_{Chrom}_{Pos}"
 
-    bam_file = serverpath / "bam" / f"{filename}.bam"
+    bam_file = serverpath / "bam" / f"{filename}.calmd.bam"
     if not bam_file.exists():
         processed_bam(serverpath, Chrom, Pos, Ref)
 
@@ -428,27 +391,6 @@ def index(browser=None):
     # Otherwise treat it as a file request
     print("FILE HIT:", DATA_DIR, browser, flush=True)
     return send_from_directory(DATA_DIR, browser, mimetype=get_mimetype(browser))
-
-# @app.route('/')
-# @app.route("/<path:browser>/",strict_slashes=False)
-# def index(browser=None):
-#     print("INDEX HIT:", browser, DATA_DIR, flush=True)
-#     if browser is None:
-#         serverpath = DATA_DIR          # default location
-#     else:
-#         serverpath = DATA_DIR / browser
-#     return send_from_directory(serverpath, 'interactive_variants.html')
-
-# @app.route('/')
-# def index():
-#    return send_from_directory(DATA_DIR, 'interactive_viewer.html')
-
-
-# @app.route('/<path:filename>')
-# def serve_file(filename):
-#     print("FILE HIT:", DATA_DIR, filename,flush=True)
-#     return send_from_directory(DATA_DIR, filename, mimetype=get_mimetype(filename))
-
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=args.port, debug=True)

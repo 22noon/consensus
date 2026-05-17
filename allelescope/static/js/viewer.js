@@ -70,6 +70,12 @@ function updateReadList() {
             ${readList}
             <div class="mt-2">
                 <button class="btn btn-sm btn-success w-100" 
+                        onclick="IsolateSelectedReads()">
+                    ⬇Retain these reads 
+                </button>
+            </div>
+            <div class="mt-2">
+                <button class="btn btn-sm btn-success w-100" 
                         onclick="exportSelectedReads()">
                     ⬇ Export as BAM
                 </button>
@@ -101,6 +107,36 @@ function searchForRead(readName) {
 }
 
 async function exportSelectedReads() {
+    if (selectedReads.size === 0) {
+        showFilterMessage("No reads selected");
+        return;
+    }
+
+    showFilterMessage("Extracting reads...");
+
+    // Extract browser path from API_BASE the same way serve_bam receives it
+    const browserPath = API_BASE.replace(/^\//, '');  // strip leading slash
+    const filters = getFilterSettings();
+    const filterString = Create_Filter_String(Current.Chrom, Current.Pos, filters);
+
+    // Step 1: POST the reads, get back a token
+    const tokenResponse = await fetch(`${API_BASE}/api/extract_reads`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            reads: [...selectedReads],
+            filterString: filterString,
+            browser: browserPath
+        })
+    });
+    const { token } = await tokenResponse.json();
+
+    // Step 2: GET the file using the token — clean browser download, no blocking
+    window.open(`${API_BASE}/api/extract_reads/${token}`, '_blank');
+}
+
+
+async function IsolateSelectedReads() {
     if (selectedReads.size === 0) {
         showFilterMessage("No reads selected");
         return;
@@ -606,6 +642,7 @@ function getFilterSettings() {
     Supplementary= document.getElementById('filter-supplementary').checked;
     ReadPaired= document.getElementById('filter-paired').checked;
     ProperPair= document.getElementById('filter-properpair').checked;
+
     //Include
     FqcFailed = document.getElementById('retain-qcfail').checked;
     Fduplicated = document.getElementById('retain-duplicates').checked;
@@ -640,6 +677,7 @@ function getFilterSettings() {
 
     filters.flagf = MapFlag(ReadPaired, ProperPair, Secondary, QcFailed, Duplicated, Supplementary);
     filters.flagF = MapFlag(FreadPaired, FproperPair, Fsecondary, FqcFailed, Fduplicated, Fsupplementary);
+    MapStrand(filters);
     filters.tagf = MapTag(overlap, nonSpanningMate, splitX, split, Proper, Improper);
     filters.tagF = MapTag(Foverlap, FnonSpanningMate, FsplitX, Fsplit, Fproper, Fimproper);
     filters.scThreshold = parseInt(document.getElementById('filter-min-soft-clip').value) || 0;
@@ -691,6 +729,29 @@ function MapFlag(readPaired, properPair, secondary, qcFailed, duplicates, supple
     if (duplicates) combinedFlag |= FLAG_DUPLICATE;
     if (supplementary) combinedFlag |= FLAG_SUPPLEMENTARY;
     return combinedFlag;
+}
+
+function MapStrand(filters) {
+    const FLAG_REVERSE = 0x10;
+    const strand = document.getElementById("strand-filter").value;
+
+    switch (strand) {
+        case "plus":
+            // Keep only forward strand reads: filter out reverse strand.
+            filters.flagf |= FLAG_REVERSE;
+            filters.flagF &= ~FLAG_REVERSE;
+            break;
+        case "minus":
+            // Keep only reverse strand reads: require reverse strand.
+            filters.flagF |= FLAG_REVERSE;
+            filters.flagf &= ~FLAG_REVERSE;
+            break;
+        default:
+            // No strand-specific filtering.
+            filters.flagf &= ~FLAG_REVERSE;
+            filters.flagF &= ~FLAG_REVERSE;
+            break;
+    }
 }
 
 function getTrackColor(defaultColor) {
@@ -1019,6 +1080,7 @@ function initializeEventListeners() {
 
     // View as pairs toggle
     document.getElementById('view-as-pairs').addEventListener('change', applyFilters);
+    document.getElementById('strand-filter').addEventListener('change', applyFilters);
 
     // MAPQ threshold
     document.getElementById('min-mapq').addEventListener('input', scheduleFilterApplication);
