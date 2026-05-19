@@ -268,6 +268,22 @@
                         </label>
                         </div>
                     </div>
+
+                    <!-- Strand selector -->
+                    <div class="d-flex align-items-center gap-2">
+                        <label for="strand-filter"
+                            class="small fw-semibold mb-0">
+                            Strand
+                        </label>
+
+                        <select id="strand-filter"
+                                class="form-select form-select-sm"
+                                style="width: 110px;">
+                            <option value="both" selected>Both</option>
+                            <option value="plus">Plus (+)</option>
+                            <option value="minus">Minus (-)</option>
+                        </select>
+                    </div>
                 </div>
             </div>
         </div>
@@ -635,8 +651,18 @@
     </script>
     
     <!-- Main application script -->
-    <script src="config.js"></script>
-    <script src="/static/js/viewer.js"></script>
+        <script src="config.js"></script>
+        <script src="/static/js/state.js"></script>
+        <script src="/static/js/utils.js"></script>
+        <script src="/static/js/readSelection.js"></script>
+        <script src="/static/js/alleleFilter.js"></script>
+        <script src="/static/js/manualVariants.js"></script>
+        <script src="/static/js/filters.js"></script>
+        <script src="/static/js/navigation.js"></script>
+        <script src="/static/js/trackClick.js"></script>
+        <script src="/static/js/tabs.js"></script>
+        <script src="/static/js/igv.js"></script>
+        <script src="/static/js/viewer.js"></script>
 
 </body>
 </html>

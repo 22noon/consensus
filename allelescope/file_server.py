@@ -90,6 +90,11 @@ def send_file_with_range(path: Path, mimetype="application/octet-stream"):
         return send_from_directory(path.parent, path.name, mimetype=mimetype)
 
     if start >= file_size or start < 0 or end < start:
+        print(f"Serving {path} with Range: {start}-{end} (size: {file_size}) ", flush=True) 
+        return Response(
+            status=204,  # No Content
+            headers={"Accept-Ranges": "bytes", "X-Empty-File": "true"}
+        )
         return send_from_directory(path.parent, path.name, mimetype=mimetype)
 
     end = min(end, file_size - 1)
@@ -98,6 +103,7 @@ def send_file_with_range(path: Path, mimetype="application/octet-stream"):
     with open(path, "rb") as f:
         f.seek(start)
         data = f.read(length)
+
 
     headers = {
         "Accept-Ranges": "bytes",
@@ -123,7 +129,8 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
     Pure-Python replacement for build_samtools_view_cmd.
     Returns a list of filtered AlignedSegment reads.
     """
-    bam_file = serverpath / "bam" / f"{filename}.calmd.bam"
+    token = params.get("Token")
+    bam_file = serverpath / "bam" / f"{filename}{token}.calmd.bam"
     print(f"Getting filtered reads from BAM for {filename} with params {params} from {bam_file}", flush=True)
     if not bam_file.exists():
         processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"))
@@ -133,7 +140,6 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
     tag_f  = int(params.get("Tagf", 0))   # XO tag: all bits must be set
     tag_F  = int(params.get("TagF", 0))   # XO tag: all bits must be unset
     max_nm = int(params.get("EditDistance", 0))
-    #xa_filter = escape_xa_filter(params.get("XAFilter", "").strip())
     xa_filter = escape_xa_filter(params.get("XAFilter", "").strip())
     xa_set = set(xa_filter.split("|")) if xa_filter else None
 
@@ -255,11 +261,46 @@ def serve_bam(browser=None):
 
     return send_file_with_range(bam_path)
 
+@app.route("/api/isolate_reads", methods=["POST"])
+@app.route("/<path:browser>/api/isolate_reads", methods=["POST"])
+def isolate_reads(browser=None):
+    if browser is None:
+        serverpath = DATA_DIR          # default location
+    else:
+        serverpath = DATA_DIR / browser
+
+    data = request.get_json()
+
+    target_reads = set(data.get("reads"))
+    filter_string = data.get("filterString")
+    token = hashlib.sha256( "\n".join(sorted(target_reads)).encode()).hexdigest()[:16]
+
+    params = dict(urllib.parse.parse_qsl(filter_string.lstrip("?"), keep_blank_values=True))
+    chrom = params.get("Chrom")
+    pos   = params.get("Pos")
+    print(f"ISOLATE_READS HIT: {browser}, {chrom}, {pos}, {filter_string}, token={token}", flush=True)
+
+    out_bam = serverpath / f"bam/variant_{chrom}_{pos}{token}.calmd.bam"
+    in_bam = serverpath / f"bam/variant_{chrom}_{pos}.calmd.bam"
+    print("EXTRACT_READS HIT:", browser, chrom, pos, filter_string, in_bam, out_bam, token, flush=True)
+
+    if not in_bam or not os.path.exists(in_bam):
+        return jsonify({"error": "No BAM found to extract reads from"}), 404
+
+    with pysam.AlignmentFile(in_bam, "rb") as inbam:
+        with pysam.AlignmentFile(out_bam, "wb", header=inbam.header) as outbam:
+            for read in inbam.fetch(chrom):
+                if read.query_name in target_reads:
+                    outbam.write(read)
+
+    pysam.index(str(out_bam))
+    return(jsonify({"success": True, "token": token}))
+
 @app.route("/api/extract_reads", methods=["POST"])
 @app.route("/<path:browser>/api/extract_reads", methods=["POST"])
 def stage_extract_reads(browser=None):
     data = request.get_json()
-    token = str(uuid.uuid4())
+    token = hashlib.sha256( "\n".join(sorted(data.get("reads"))).encode()).hexdigest()[:16]
     pending_extractions[token] = {
         "reads": data.get("reads"),
         "filterString": data.get("filterString"),
@@ -292,7 +333,7 @@ def extract_reads(browser=None, token=None):
     cache_key = build_cache_key(filename, *params.values())
     cache_dir = CACHE_ROOT / browser
     bam_path = cache_dir / f"{cache_key}.bam"
-    print("EXTRACT_READS HIT:", browser, chrom, pos, filter_string, bam_path, flush=True)
+    print("EXTRACT_READS HIT:", browser, chrom, pos, filter_string, bam_path, token, flush=True)
 
     if not bam_path or not os.path.exists(bam_path):
         return jsonify({"error": "No cached BAM found — navigate to a variant first"}), 404
@@ -369,6 +410,7 @@ def extract_bam(browser=None):
 
         return jsonify({"success": True, "alleles": mock_alleles})
     return jsonify({"success": False}), 500
+
 
 
 # -----------------------------
