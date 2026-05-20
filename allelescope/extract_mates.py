@@ -303,7 +303,8 @@ def extract_mates(
     print(f"Writing overlapping reads to {out_bam} and collecting mate positions...")
     mate_regions  = defaultdict()
     split_reads   = defaultdict(set)
-
+    
+    XA_dict = {}  # dictionary to store XA tag values for reads, keyed by query_name for adding to mates 
     for read in bam.fetch(chrom, start - 1, end):
         if read.is_unmapped:
             continue
@@ -332,7 +333,7 @@ def extract_mates(
         signed_len, summary_str, max_del, max_ins = summarise_indels(indels)
         allele_counts[allele] += 1
 
-        read.set_tag("XA", allele,      value_type="Z")
+        read.set_tag("XA", allele,      value_type="Z"); XA_dict[read.query_name] = allele  
         read.set_tag("XI", signed_len,  value_type="i")
         read.set_tag("XD", max_del,     value_type="i")
         read.set_tag("XN", max_ins,     value_type="i")
@@ -383,6 +384,7 @@ def extract_mates(
                         scan_positions_count[mate_regions[mate_read.query_name]] -= 1
                         XO |= Tag_bits['NON_SPANNING_MATE']
                         mate_read = tag_read(mate_read, XO)
+                        mate_read.set_tag("XA", XA_dict.get(mate_read.query_name, ""), value_type="Z")
                         mate.write(calculate_softclip_lengths(mate_read))
                         mates_to_check.remove(mate_read.query_name)
 

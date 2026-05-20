@@ -34,20 +34,35 @@ function updateReadList() {
         ).join('');
 
         listDiv.innerHTML = `
-            <strong>Selected Reads (${AppState.selectedReads.size}):</strong><br>
-            ${readList}
-            <div class="mt-2">
-                <button class="btn btn-sm btn-success w-100"
+            <div class="selected-header">
+                <strong>Selected Reads (${AppState.selectedReads.size})</strong>
+            </div>
+
+            <div class="read-list">
+                ${readList}
+            </div>
+
+            <div class="read-action-bar">
+                <button class="btn btn-primary btn-sm"
                         onclick="IsolateSelectedReads()">
-                    ⬇Retain these reads
+                    <i class="bi bi-funnel-fill me-1"></i>
+                    Retain
+                </button>
+
+                <button class="btn btn-warning btn-sm"
+                        onclick="filterSelectedReads()">
+                    <i class="bi bi-filter me-1"></i>
+                    Filter
+                </button>
+
+                <button class="btn btn-outline-secondary btn-sm"
+                        onclick="exportSelectedReads()">
+                    <i class="bi bi-download me-1"></i>
+                    Export
                 </button>
             </div>
-            <div class="mt-2">
-                <button class="btn btn-sm btn-success w-100"
-                        onclick="exportSelectedReads()">
-                    ⬇ Export as BAM
-                </button>
-            </div>`;
+        `;
+
     } else {
         listDiv.textContent = '';
     }
@@ -130,6 +145,33 @@ async function IsolateSelectedReads() {
     refreshCurrentView();
 
 }
+
+async function filterSelectedReads() {
+    if (AppState.selectedReads.size === 0) {
+        showFilterMessage("No reads selected");
+        return;
+    }
+
+    showFilterMessage("Removing reads...");
+
+    const browserPath  = AppState.API_BASE.replace(/^\//, '');
+    const filters      = getFilterSettings();
+    const filterString = Create_Filter_String(AppState.Current.Chrom, AppState.Current.Pos, filters);
+
+    const tokenResponse = await fetch(`${AppState.API_BASE}/api/remove_reads`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({
+            reads:        [...AppState.selectedReads],
+            filterString: filterString,
+            browser:      browserPath
+        })
+    });
+    const { token } = await tokenResponse.json();
+    AppState.Token = token;
+    refreshCurrentView();
+}
+
 
 function applyReadHighlighting() {
     console.log("Applying highlighting to", AppState.selectedReads.size, "reads");

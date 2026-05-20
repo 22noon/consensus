@@ -14,7 +14,6 @@ import re
 import hashlib
 from pathlib import Path
 from process_variant import process_variant
-import uuid
 import shutil
 
 
@@ -223,6 +222,7 @@ def serve_bai(browser=None):
     filename = f"variant_{Chrom}_{Pos}"
     params = request.args.to_dict()
     cache_key = build_cache_key(filename, *params.values())
+    print(f"Cache key for BAI: {cache_key}", flush=True)
 
     bam_path = cache_dir / f"{cache_key}.bam"
     bai_path = cache_dir / f"{cache_key}.bam.bai"
@@ -257,6 +257,7 @@ def serve_bam(browser=None):
 
     params = request.args.to_dict()
     cache_key = build_cache_key(filename, *params.values())
+    print(f"Cache key for BAM: {cache_key}", flush=True)
     bam_path = build_filtered_bam(serverpath, cache_dir, filename, cache_key, params)
 
     return send_file_with_range(bam_path)
@@ -291,6 +292,41 @@ def isolate_reads(browser=None):
         with pysam.AlignmentFile(out_bam, "wb", header=inbam.header) as outbam:
             for read in inbam.fetch(chrom):
                 if read.query_name in target_reads:
+                    outbam.write(read)
+
+    pysam.index(str(out_bam))
+    return(jsonify({"success": True, "token": token}))
+
+@app.route("/api/remove_reads", methods=["POST"])
+@app.route("/<path:browser>/api/remove_reads", methods=["POST"])
+def remove_reads(browser=None):
+    if browser is None:
+        serverpath = DATA_DIR          # default location
+    else:
+        serverpath = DATA_DIR / browser
+
+    data = request.get_json()
+
+    target_reads = set(data.get("reads"))
+    filter_string = data.get("filterString")
+    token = "X" + hashlib.sha256( "\n".join(sorted(target_reads)).encode()).hexdigest()[:16]
+
+    params = dict(urllib.parse.parse_qsl(filter_string.lstrip("?"), keep_blank_values=True))
+    chrom = params.get("Chrom")
+    pos   = params.get("Pos")
+    print(f"REMOVE_READS HIT: {browser}, {chrom}, {pos}, {filter_string}, token={token}", flush=True)
+
+    out_bam = serverpath / f"bam/variant_{chrom}_{pos}{token}.calmd.bam"
+    in_bam = serverpath / f"bam/variant_{chrom}_{pos}.calmd.bam"
+    print("REMOVE_READS HIT:", browser, chrom, pos, filter_string, in_bam, out_bam, token, flush=True)
+
+    if not in_bam or not os.path.exists(in_bam):
+        return jsonify({"error": "No BAM found to extract reads from"}), 404
+
+    with pysam.AlignmentFile(in_bam, "rb") as inbam:
+        with pysam.AlignmentFile(out_bam, "wb", header=inbam.header) as outbam:
+            for read in inbam.fetch(chrom):
+                if read.query_name not in target_reads:
                     outbam.write(read)
 
     pysam.index(str(out_bam))
