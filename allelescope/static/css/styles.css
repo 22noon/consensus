@@ -58,48 +58,98 @@ body {
     overflow: hidden;
 }
 
+/* ── Layout ── */
 .main-container {
     display: flex;
-    height: 95vh;
+    flex-direction: row;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
 }
 
 .left-pane {
-    width: 35%;
+    position: relative;
+    width: 420px;           /* comfortable default — enough for labels/inputs */
     min-width: 420px;
     max-width: 600px;
-    overflow-y: auto;
-    border-right: 1px solid #ddd;
-    padding: 15px;
+    flex-shrink: 0;
+    overflow: visible;      /* lets toggle button stick out */
     background: #f8f9fa;
+    border-right: 1px solid #ddd;
+    transition: width 0.3s ease, min-width 0.3s ease;
+}
+
+.left-pane.collapsed {
+    width: 0;
+    min-width: 0;
+}
+
+.left-pane-inner {
+    width: 100%;
+    height: 100%;
+    overflow-y: auto;       /* scroll if content is taller than viewport */
+    overflow-x: hidden;
+    padding: 15px;
+    box-sizing: border-box;
 }
 
 .right-pane {
-    width: 65%;
+    flex: 1;
+    min-width: 0;           /* prevents flex overflow */
+    overflow: hidden;
     padding: 10px;
+    box-sizing: border-box;
 }
 
+.resizer {
+    width: 4px;
+    cursor: col-resize;
+    background: #dee2e6;
+    flex-shrink: 0;
+    transition: background 0.2s;
+}
+
+.resizer:hover,
+.resizer.dragging {
+    background: #0d6efd;
+}
+
+.left-pane.collapsed ~ .resizer {
+    display: none;
+}
+
+/* ── Toggle button ── */
+#pane-toggle {
+    position: absolute;
+    right: -16px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 100;
+    width: 16px;
+    height: 48px;
+    padding: 0;
+    cursor: pointer;
+    background: #4a4a4a;
+    color: white;
+    border: none;
+    border-radius: 0 4px 4px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+}
+
+#pane-toggle:hover {
+    background: #666;
+}
+
+/* ── IGV ── */
 #igv-div {
     width: 100%;
     height: 90vh;
     border: 1px solid #ddd;
 }
 
-.accordion-button {
-    font-size: 0.9rem;
-}
-
-.accordion-body {
-    font-size: 0.85rem;
-}
-
-.card-subtle {
-    background: #ffffff;
-    border: 1px solid #e5e5e5;
-    border-radius: 6px;
-    padding: 10px;
-}
-
-/* IGV height slider controls */
 #igv-controls {
     margin-top: 10px;
     padding-top: 10px;
@@ -127,10 +177,27 @@ body {
     font-weight: bold;
 }
 
+/* ── Typography ── */
+.accordion-button {
+    font-size: 0.9rem;
+}
+
+.accordion-body {
+    font-size: 0.85rem;
+}
+
+.card-subtle {
+    background: #ffffff;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    padding: 10px;
+}
+
 table {
     font-size: 0.85rem;
 }
 
+/* ── Tabs ── */
 #chromTabs {
     overflow-x: auto;
     white-space: nowrap;
@@ -141,7 +208,7 @@ table {
     flex: 0 0 auto;
 }
 
-/* Selected rows */
+/* ── Table row states ── */
 .table > tbody > tr.selected > *,
 .table > tbody > tr.selected:hover > * {
     --bs-table-bg: #dbeafe !important;
@@ -160,13 +227,11 @@ table {
     font-weight: 500;
 }
 
-/* Manual rows */
 .table-hover tbody tr.manual-row > * {
     --bs-table-bg-state: #fff3cd;
     background-color: #fff3cd !important;
 }
 
-/* Manual rows when selected */
 .table-hover tbody tr.manual-row.selected > *,
 .table-hover tbody tr.manual-row.selected:hover > * {
     --bs-table-bg-state: #ffc107;

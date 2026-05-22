@@ -42,7 +42,7 @@ function buildAlleleFilterPanel(chrom, pos, alleles) {
             <span class="badge ${color} border text-uppercase"
                   style="font-size:0.65rem; min-width:2.8rem;">${label}</span>
 
-            <code class="small flex-shrink-0" style="min-width:4rem;">${a.xa}</code>
+            <code class="small flex-shrink-0" style="min-width:4rem;">${a.xa.substring(1)}</code>
 
             <div class="flex-grow-1 bg-light rounded" style="height:8px; overflow:hidden;">
                 <div class="rounded"
@@ -119,7 +119,7 @@ function buildAlleleFilterPanel(chrom, pos, alleles) {
         </div>
     `;
 
-    const leftPane    = document.querySelector('.left-pane');
+    const leftPane    = document.querySelector('.left-pane-inner');
     const variantCard = document.querySelector('.card.shadow-sm.mt-3');
     leftPane.insertBefore(panel, variantCard);
     filterAlleleRows();
