@@ -1,0 +1,28 @@
+
+<div class="card shadow-sm mt-3">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Variants</strong>
+
+        <span id="variant-count" class="text-muted small"></span>
+
+        <!-- Optional toggle -->
+        <button id="toggleEmptyTabs"
+                onclick="toggleEmptyTabs()"
+                type="button">
+            Show empty chromosomes
+        </button>
+    </div>
+
+    <div class="card-body p-2">
+
+        <!-- Chromosome Tabs -->
+        <ul class="nav nav-tabs"
+            id="chromTabs"
+            role="tablist"></ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content mt-3"
+             id="chromTabContent"></div>
+
+    </div>
+</div>

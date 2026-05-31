@@ -1,0 +1,22 @@
+<div class="left-pane">
+  <div class="left-pane-inner">
+
+    {% include "components/manual_jump.html" %}
+    {% include "components/variant_tabs.html" %}
+    {% include "components/view_options.html" %}
+    {% include "filters/filter_accordion.html" %}
+    <div class="card shadow-sm mb-3">
+      <div class="card-body p-2">
+          <strong class="small">Active Filters</strong>
+          <div id="active-filters"
+              class="small text-muted mt-1">
+            None
+          </div>
+      </div>
+    </div>
+    {% include "components/read_selection.html" %}
+
+    <button id="pane-toggle" onclick="toggleLeftPane()">◀</button>
+
+  </div>
+</div>

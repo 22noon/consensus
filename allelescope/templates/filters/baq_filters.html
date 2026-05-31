@@ -1,0 +1,44 @@
+<!-- ===== BAQ FILTERS ===== -->
+<div class="accordion-item">
+
+  <h2 class="accordion-header">
+    <button class="accordion-button collapsed"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#collapseBaq">
+      BAQ Filters
+    </button>
+  </h2>
+
+  <div id="collapseBaq"
+       class="accordion-collapse collapse"
+       data-bs-parent="#readFilterAccordion">
+
+    <div class="accordion-body">
+
+      <h6 class="mb-2">BAQ value</h6>
+
+      <div class="row g-2 mb-3">
+        <div class="col">
+          <label class="form-label small">Min</label>
+          <input type="number"
+                 id="min-baq"
+                 data-filter-id="min-baq"
+                 class="form-control form-control-sm"
+                 value="0" min="0" max="60">
+        </div>
+
+        <div class="col">
+          <label class="form-label small">Max</label>
+          <input type="number"
+                 id="max-baq"
+                 data-filter-id="max-baq"
+                 class="form-control form-control-sm"
+                 value="0" min="0" max="60">
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>

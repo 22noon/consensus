@@ -237,3 +237,21 @@ table {
     --bs-table-bg-state: #ffc107;
     background-color: #ffc107 !important;
 }
+
+.read-item {
+    background: #f8f9fa;
+    transition: background 0.2s;
+}
+
+.read-item:hover {
+    background: #e9ecef;
+}
+
+.read-name {
+    cursor: pointer;
+    font-size: 0.85rem;
+}
+
+.read-actions button {
+    padding: 2px 6px;
+}

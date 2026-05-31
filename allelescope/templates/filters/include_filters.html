@@ -1,0 +1,82 @@
+<div class="accordion-item">
+    <h2 class="accordion-header">
+        <button class="accordion-button collapsed"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#collapseInclude">
+            Include (Require)
+        </button>
+    </h2>
+
+    <div id="collapseInclude"
+         class="accordion-collapse collapse"
+         data-bs-parent="#readFilterAccordion">
+
+        <div class="accordion-body">
+
+            <h6 class="text-success">Flags</h6>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-duplicates" data-filter-id="filter-duplicates" class="filter-checkbox form-check-input">
+                <label class="form-check-label">Duplicates</label>
+            </div>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-properpair" data-filter-id="filter-properpair" class="filter-checkbox form-check-input">
+                <label class="form-check-label">Proper Pairs</label>
+            </div>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-secondary" data-filter-id="filter-secondary" class="filter-checkbox form-check-input">
+                <label class="form-check-label">Secondary</label>
+            </div>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-supplementary" data-filter-id="filter-supplementary" class="filter-checkbox form-check-input">
+                <label class="form-check-label">Supplementary</label>
+            </div>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-qcfail" data-filter-id="filter-qcfail" class="filter-checkbox form-check-input">
+                <label class="form-check-label">QC Failed</label>
+            </div>
+
+            <div class="form-check mb-3">
+                <input type="checkbox" id="filter-paired" data-filter-id="filter-paired" class="filter-checkbox form-check-input">
+                <label class="form-check-label">Paired</label>
+            </div>
+
+            <h6 class="text-success">XO Tag Bits</h6>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-tag-overlap" data-filter-id="filter-tag-overlap" class="filter-checkbox form-check-input">
+                <label class="form-check-label">overlap</label>
+            </div>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-tag-nonspanningmate" data-filter-id="filter-tag-nonspanningmate" class="filter-checkbox form-check-input">
+                <label class="form-check-label">mates</label>
+            </div>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-tag-splitx" data-filter-id="filter-tag-splitx" class="filter-checkbox form-check-input">
+                <label class="form-check-label">split mates</label>
+            </div>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-tag-split" data-filter-id="filter-tag-split" class="filter-checkbox form-check-input">
+                <label class="form-check-label">split reads</label>
+            </div>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-tag-proper" data-filter-id="filter-tag-proper" class="filter-checkbox form-check-input">
+                <label class="form-check-label">proper</label>
+            </div>
+
+            <div class="form-check">
+                <input type="checkbox" id="filter-tag-improper" data-filter-id="filter-tag-improper" class="filter-checkbox form-check-input">
+                <label class="form-check-label">improper</label>
+            </div>
+        </div>
+    </div>
+</div>
