@@ -26,39 +26,115 @@ async function initializeIGV() {
 /**
  * UI Event Listener Initialization
  */
-function initializeEventListeners() {
-    // Filter checkboxes
-    document.querySelectorAll('.filter-checkbox').forEach(cb => {
-        cb.addEventListener('change', applyFilters);
-    });
+/* avoid mutual exclusivity conflicts by auto-unchecking the complement when one is toggled */
+function enforceMutualExclusion(el) {
 
-    document.getElementById('view-as-pairs').addEventListener('change', applyFilters);
-    document.getElementById('strand-filter').addEventListener('change', applyFilters);
+    const id = el.id;
 
-    // MAPQ threshold (debounced)
-    document.getElementById('min-mapq').addEventListener('input', scheduleFilterApplication);
+    if (id.startsWith("filter-") || id.startsWith("retain-")) {
 
-    document.getElementById('filter-min-soft-clip').addEventListener('change', applyFilters);
-    document.getElementById('retain-min-soft-clip').addEventListener('change', applyFilters);
-    document.getElementById('filter-min-edit-distance').addEventListener('change', applyFilters);
-    document.getElementById('retain-max-edit-distance').addEventListener('change', applyFilters);
-    document.getElementById('min-baq').addEventListener('change', applyFilters);
-    document.getElementById('max-baq').addEventListener('change', applyFilters);
+        const complementId = id.startsWith("filter-")
+            ? id.replace("filter-", "retain-")
+            : id.replace("retain-", "filter-");
 
-    // Spanning reads toggle
-    document.getElementById('show-spanning').addEventListener('change', function () {
-        if (!this.checked && AppState.spanningTrackLoaded) {
-            const tracks = AppState.browser.trackViews;
-            for (let i = tracks.length - 1; i >= 0; i--) {
-                if (tracks[i].track.name === "Spanning Reads Only") {
-                    AppState.browser.removeTrack(tracks[i].track);
-                    AppState.spanningTrackLoaded = false;
-                    break;
-                }
-            }
-        } else if (this.checked && AppState.currentVariant && !AppState.spanningTrackLoaded) {
-            const flankSize = parseInt(document.getElementById('flank-size').value) || 100;
-            navigateToVariant(AppState.currentVariant, flankSize);
+        const other = document.getElementById(complementId);
+
+        if (other && other.checked) {
+            other.checked = false;
+            alert("This filter is mutually exclusive with its complement. The other filter has been unchecked.");
+
+            // Update state immediately
+            FILTER_STATE[complementId] = false;
         }
+    }
+}
+
+let debounceTimer;
+function debounceApply() {
+    clearTimeout(debounceTimer);
+
+    debounceTimer = setTimeout(() => {
+        applyFilters();
+    }, 150);
+}
+
+function bindFilterEvents() {
+    document.querySelectorAll("[data-filter-id]").forEach(el => {
+
+        el.addEventListener("change", (e) => {
+            enforceMutualExclusion(e.target);
+            debounceApply();
+        });
+        el.addEventListener("input", debounceApply);
+
     });
 }
+
+
+function initializeUIEventListeners() {
+
+    // Manual jump input (Enter key)
+    const manualInput = document.getElementById("manual-position-input");
+    if (manualInput) {
+        manualInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") addManualVariantRow();
+        });
+    }
+
+    // Spanning reads toggle (KEEP as-is — custom logic)
+    const spanningToggle = document.getElementById('show-spanning');
+    if (spanningToggle) {
+        spanningToggle.addEventListener('change', function () {
+
+            if (!this.checked && AppState.spanningTrackLoaded) {
+                const tracks = AppState.browser.trackViews;
+
+                for (let i = tracks.length - 1; i >= 0; i--) {
+                    if (tracks[i].track.name === "Spanning Reads Only") {
+                        AppState.browser.removeTrack(tracks[i].track);
+                        AppState.spanningTrackLoaded = false;
+                        break;
+                    }
+                }
+
+            } else if (this.checked && AppState.currentVariant && !AppState.spanningTrackLoaded) {
+                const flankSize = parseInt(document.getElementById('flank-size')?.value) || 100;
+                navigateToVariant(AppState.currentVariant, flankSize);
+            }
+        });
+    }
+
+    // IGV mouse interaction (KEEP)
+    const igvDiv = document.getElementById('igv-div');
+    if (igvDiv) {
+
+        igvDiv.addEventListener('mousedown', e => {
+            AppState.lastMouseEvent = e;
+        });
+
+        igvDiv.addEventListener('contextmenu', e => {
+            e.preventDefault();
+        });
+    }
+}
+
+
+/**
+ * Initialization Sequence
+ *
+ * Note: The main initialization logic is now outside of the DOMContentLoaded event listener for clarity.
+ * Need to ensure that this script is loaded after the DOM elements it interacts with are available, or use deferred initialization in html tag calling this routine    .
+ */
+console.log("Initializing Interactive Variant Viewer...");
+buildVariantTabs(AppState.variants);
+bindFilterEvents();
+initializeIGV();
+console.log("Initialization complete!");
+
+
+
+//initFilterState();
+//loadFilters();         // optional persistence
+//restoreUI();           // update inputs
+//applyFilters();
+//populatePresetDropdown();

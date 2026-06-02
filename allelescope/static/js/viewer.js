@@ -15,27 +15,3 @@
  *   <script src="igv.js"></script>
  *   <script src="viewer.js"></script>
  */
-
-document.addEventListener('DOMContentLoaded', async function () {
-    console.log("Initializing Interactive Variant Viewer...");
-
-    document.getElementById("manual-position-input")
-        .addEventListener("keydown", function (e) {
-            if (e.key === "Enter") addManualVariantRow();
-        });
-
-    buildVariantTabs(AppState.variants);
-    initializeEventListeners();
-    await initializeIGV();
-
-    // Trap mouse events on the IGV div for read selection (Shift+Click)
-    const igvDiv = document.getElementById('igv-div');
-    igvDiv.addEventListener('mousedown', e => {
-        AppState.lastMouseEvent = e;
-    });
-    igvDiv.addEventListener('contextmenu', e => {
-        e.preventDefault();
-    });
-
-    console.log("Initialization complete!");
-});
