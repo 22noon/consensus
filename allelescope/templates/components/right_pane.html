@@ -1,0 +1,20 @@
+<div class="right-pane">
+  <!-- Loading indicator -->
+  <div id="loading-indicator"
+      style="position:absolute; top:10px; right:10px; z-index:1000; display:none;">
+      <div class="spinner-border text-primary" role="status"></div>
+  </div>
+
+  <div id="igv-controls">
+    <input type="range"
+           id="height-slider"
+           min="300"
+           max="1200"
+           value="500">
+  </div>
+
+  <div id="igv-div"></div>
+
+  {% include "components/filter_toast.html" %}
+
+</div>

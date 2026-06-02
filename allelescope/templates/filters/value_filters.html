@@ -1,0 +1,81 @@
+<!-- ===== VALUE FILTERS ===== -->
+<div class="accordion-item">
+
+    <h2 class="accordion-header">
+        <button class="accordion-button collapsed"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target="#collapseValue">
+            Filter by Value
+        </button>
+    </h2>
+
+    <div id="collapseValue"
+         class="accordion-collapse collapse"
+         data-bs-parent="#readFilterAccordion">
+
+        <div class="accordion-body">
+            <div class="card-subtle">
+
+                <!-- Soft Clip -->
+                <h6 class="mb-2">Soft Clip Length</h6>
+                <div class="row g-2 mb-3">
+                    <div class="col">
+                        <label class="form-label small">Min</label>
+                        <input type="number"
+                               id="filter-min-soft-clip"
+                               data-filter-id="filter-min-soft-clip"
+                               class="form-control form-control-sm"
+                               value="0" min="0" max="60">
+                    </div>
+
+                    <div class="col">
+                        <label class="form-label small">Max</label>
+                        <input type="number"
+                               id="retain-min-soft-clip"
+                               data-filter-id="retain-min-soft-clip"
+                               class="form-control form-control-sm"
+                               value="0" min="0" max="60">
+                    </div>
+                </div>
+
+                <!-- Edit Distance -->
+                <h6 class="mb-2">Edit Distance</h6>
+                <div class="row g-2">
+                    <div class="col">
+                        <label class="form-label small">Min</label>
+                        <input type="number"
+                               id="filter-min-edit-distance"
+                               data-filter-id="filter-min-edit-distance"
+                               class="form-control form-control-sm"
+                               value="0" min="0" max="60">
+                    </div>
+
+                    <div class="col">
+                        <label class="form-label small">Max</label>
+                        <input type="number"
+                               id="retain-max-edit-distance"
+                               data-filter-id="retain-max-edit-distance"
+                               class="form-control form-control-sm"
+                               value="0" min="0" max="60">
+                    </div>
+                </div>
+
+                <!-- MAPQ -->
+                <h6 class="mb-2">Mapping Quality</h6>
+                <div class="row g-2">
+                    <div class="col">
+                        <label class="form-label small">Max</label>
+                        <input type="number"
+                               id="min-mapq"
+                               data-filter-id="min-mapq"
+                               class="form-control form-control-sm"
+                               value="0" min="0" max="60">
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+</div>

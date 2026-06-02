@@ -1,0 +1,35 @@
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body p-2">
+
+        <h6 class="fw-bold mb-2">Read Selection</h6>
+
+        <p class="text-muted small mb-2">
+        Click read names in IGV to search or manually add below.
+        </p>
+
+        <!-- Input Row -->
+        <div class="input-group input-group-sm mb-2">
+        <input type="text"
+                id="highlight-read-name"
+                class="form-control"
+                placeholder="Enter read name">
+        <button class="btn btn-primary"
+                onclick="addReadToList()">Add</button>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="d-flex gap-1 mb-2">
+        <button class="btn btn-outline-secondary btn-sm flex-fill"
+                onclick="clearReadList()">Clear List</button>
+        <button class="btn btn-outline-secondary btn-sm flex-fill"
+                onclick="clearHighlightedReads()">Clear Highlights</button>
+        </div>
+
+        <!-- Selected Reads -->
+        <div id="highlighted-reads-list"
+            class="border rounded p-1 small bg-light"
+            style="max-height: 120px; overflow-y: auto;">
+        </div>
+
+    </div>
+</div>
