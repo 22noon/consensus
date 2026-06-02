@@ -1,3 +1,29 @@
+/* Start DOM -> FILTER_STATE -> IGV + backend wiring */
+const FILTER_STATE = {};
+
+function initFilterState() {
+    document.querySelectorAll("[data-filter-id]").forEach(el => {
+        const id = el.dataset.filterId;
+
+        FILTER_STATE[id] = (el.type === "checkbox")
+            ? el.checked
+            : el.value || 0;
+    });
+}
+
+function updateFilterStateFromUI() {
+    document.querySelectorAll("[data-filter-id]").forEach(el => {
+        const id = el.dataset.filterId;
+
+        FILTER_STATE[id] = (el.type === "checkbox")
+            ? el.checked
+            : el.value;
+    });
+}
+function saveFilters() {}
+function loadFilters() {}
+function restoreUI() {}
+
 /**
  * Filter Functions
  */
@@ -28,12 +54,12 @@ function getFilterSettings() {
     const Improper        = document.getElementById('filter-tag-improper').checked;
 
     // Include tags
-    const Foverlap         = document.getElementById('retain-tag-overlap').checked;
-    const FnonSpanningMate = document.getElementById('retain-tag-nonspanningmate').checked;
-    const FsplitX          = document.getElementById('retain-tag-splitx').checked;
-    const Fsplit           = document.getElementById('retain-tag-split').checked;
-    const Fproper          = document.getElementById('retain-tag-proper').checked;
-    const Fimproper        = document.getElementById('retain-tag-improper').checked;
+    const Foverlap         = FILTER_STATE['retain-tag-overlap'] || false;
+    const FnonSpanningMate = FILTER_STATE['retain-tag-nonspanningmate'] || false;
+    const FsplitX          = FILTER_STATE['retain-tag-splitx'] || false;
+    const Fsplit           = FILTER_STATE['retain-tag-split'] || false;
+    const Fproper          = FILTER_STATE['retain-tag-proper'] || false;
+    const Fimproper        = FILTER_STATE['retain-tag-improper'] || false;
 
     const filters = {
         mqThreshold:   parseInt(document.getElementById('min-mapq').value) || 0,
@@ -145,24 +171,29 @@ function Create_Filter_String(Chrom, pos, filters) {
     return `?${params.toString()}`;
 }
 
-async function applyFilters(e) {
-    if (e && e.target.checked) {
-        const id = e.target.id;
-        if (id.startsWith("filter-") || id.startsWith("retain-")) {
-            const complementId = id.startsWith("filter-")
-                ? id.replace("filter-", "retain-")
-                : id.replace("retain-", "filter-");
-            const complement = document.getElementById(complementId);
-            if (complement.checked) {
-                alert(`Unchecking ${complementId} to avoid conflicting filters.`);
-                complement.checked = false;
-            }
-        }
+let lastFilterString = null;
+
+async function applyFilters() {
+
+    updateFilterStateFromUI();
+
+    const variant = AppState.currentVariant;
+    if (!variant) return;
+
+    const filters = getFilterSettings();
+    const filter_string = Create_Filter_String(
+        variant.chrom,
+        variant.pos,
+        filters
+    );
+
+    // Skip reload if nothing changed
+    if (filter_string === lastFilterString) {
+        return;
     }
 
-    const filters      = getFilterSettings();
-    const currentLocus = AppState.browser.currentLoci()[0];
-    const viewAsPairs  = document.getElementById('view-as-pairs').checked;
+    lastFilterString = filter_string;
+    //const viewAsPairs  = document.getElementById('view-as-pairs').checked;
 
     // Snapshot current alignment tracks
     const alignmentTracks = [];
@@ -187,7 +218,6 @@ async function applyFilters(e) {
     }
 
     // Reload tracks with new filters
-    const filter_string = Create_Filter_String(AppState.Current.Chrom, AppState.Current.Pos, filters);
     for (const trackConfig of alignmentTracks) {
         await AppState.browser.loadTrack({
             name:         trackConfig.name,
@@ -196,31 +226,92 @@ async function applyFilters(e) {
             url:          `${trackConfig.url}${filter_string}`,
             indexURL:     `${trackConfig.indexURL}${filter_string}`,
             height:       trackConfig.height,
-            viewAsPairs:  viewAsPairs,
+            //viewAsPairs:  viewAsPairs,
             showCoverage: trackConfig.showCoverage,
             filter:       filters
         });
     }
 
-    AppState.browser.search(currentLocus);
-    showFilterMessage("Filters applied ✓");
-}
 
-function scheduleFilterApplication() {
-    const statusEl = document.getElementById('filter-status');
-    statusEl.textContent = 'Pending...';
-    if (AppState.filterTimeout) clearTimeout(AppState.filterTimeout);
-    AppState.filterTimeout = setTimeout(() => applyFilters(), 500);
+    saveFilters();
+    //updateFilterSummary();
 }
+// async function applyFiltersx(e) {
+//     if (e && e.target.checked) {
+//         const id = e.target.id;
+//         if (id.startsWith("filter-") || id.startsWith("retain-")) {
+//             const complementId = id.startsWith("filter-")
+//                 ? id.replace("filter-", "retain-")
+//                 : id.replace("retain-", "filter-");
+//             const complement = document.getElementById(complementId);
+//             if (complement.checked) {
+//                 alert(`Unchecking ${complementId} to avoid conflicting filters.`);
+//                 complement.checked = false;
+//             }
+//         }
+//     }
 
-function scheduleSoftClipFilterApplication() {
-    showFilterMessage("Pending...");
-    if (AppState.filterTimeout) clearTimeout(AppState.filterTimeout);
-    AppState.filterTimeout = setTimeout(() => {
-        showFilterMessage("Applying filters...");
-        setTimeout(() => {
-            applyFilters();
-            showFilterMessage("Filters applied ✓");
-        }, 0); // allow UI repaint before heavy work
-    }, 500);
-}
+//     const filters      = getFilterSettings();
+//     const currentLocus = AppState.browser.currentLoci()[0];
+//     const viewAsPairs  = document.getElementById('view-as-pairs').checked;
+
+//     // Snapshot current alignment tracks
+//     const alignmentTracks = [];
+//     AppState.browser.trackViews.forEach(trackView => {
+//         if (trackView.track.type === 'alignment') {
+//             trackView.track.url = trackView.track.url.split('?')[0]; // strip old filters
+//             alignmentTracks.push({
+//                 name:         trackView.track.name,
+//                 url:          trackView.track.url,
+//                 indexURL:     trackView.track.url.replace(/\/bam(?=\/|$)/, '/bai'),
+//                 height:       trackView.track.height,
+//                 showCoverage: trackView.track.showCoverage
+//             });
+//         }
+//     });
+
+//     // Remove old alignment tracks
+//     for (let i = AppState.browser.trackViews.length - 1; i >= 0; i--) {
+//         if (AppState.browser.trackViews[i].track.type === 'alignment') {
+//             AppState.browser.removeTrack(AppState.browser.trackViews[i].track);
+//         }
+//     }
+
+//     // Reload tracks with new filters
+//     const filter_string = Create_Filter_String(AppState.Current.Chrom, AppState.Current.Pos, filters);
+//     for (const trackConfig of alignmentTracks) {
+//         await AppState.browser.loadTrack({
+//             name:         trackConfig.name,
+//             type:         "alignment",
+//             format:       "bam",
+//             url:          `${trackConfig.url}${filter_string}`,
+//             indexURL:     `${trackConfig.indexURL}${filter_string}`,
+//             height:       trackConfig.height,
+//             viewAsPairs:  viewAsPairs,
+//             showCoverage: trackConfig.showCoverage,
+//             filter:       filters
+//         });
+//     }
+
+//     AppState.browser.search(currentLocus);
+//     showFilterMessage("Filters applied ✓");
+// }
+
+// function scheduleFilterApplication() {
+//     const statusEl = document.getElementById('filter-status');
+//     statusEl.textContent = 'Pending...';
+//     if (AppState.filterTimeout) clearTimeout(AppState.filterTimeout);
+//     AppState.filterTimeout = setTimeout(() => applyFilters(), 500);
+// }
+
+// function scheduleSoftClipFilterApplication() {
+//     showFilterMessage("Pending...");
+//     if (AppState.filterTimeout) clearTimeout(AppState.filterTimeout);
+//     AppState.filterTimeout = setTimeout(() => {
+//         showFilterMessage("Applying filters...");
+//         setTimeout(() => {
+//             applyFilters();
+//             showFilterMessage("Filters applied ✓");
+//         }, 0); // allow UI repaint before heavy work
+//     }, 500);
+// }
