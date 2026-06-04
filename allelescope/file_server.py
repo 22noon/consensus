@@ -139,6 +139,8 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
     tag_f  = int(params.get("Tagf", 0))   # XO tag: all bits must be set
     tag_F  = int(params.get("TagF", 0))   # XO tag: all bits must be unset
     max_nm = int(params.get("EditDistance", 0))
+    soft_clip_f = int(params.get("SoftClip", 0))  # minimum soft clip length to include
+    soft_clip_F = int(params.get("SoftClipF", 0))  # maximum soft clip length to include
     xa_filter = escape_xa_filter(params.get("XAFilter", "").strip())
     xa_set = set(xa_filter.split("|")) if xa_filter else None
 
@@ -182,6 +184,14 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
                     # replaced the regex version as complicated to replace exact matches with escapes : if not re.search(xa_filter, read.get_tag("XA")):
                 else:
                     continue  # no XA tag → let it through, same as samtools -e guard
+            if soft_clip_f or soft_clip_F:
+                sr = read.get_tag("SR");
+                sl = read.get_tag("SL");
+                clip_length = sr+sl
+                if soft_clip_f and clip_length < soft_clip_f:
+                    continue
+                if soft_clip_F and clip_length > soft_clip_F:
+                    continue
 
             reads.append(read)
     return header, reads
