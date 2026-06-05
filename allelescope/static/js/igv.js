@@ -52,7 +52,6 @@ function enforceMutualExclusion(el) {
 let debounceTimer;
 function debounceApply() {
     clearTimeout(debounceTimer);
-
     debounceTimer = setTimeout(() => {
         applyFilters();
     }, 150);

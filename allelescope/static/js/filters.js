@@ -30,12 +30,8 @@ function restoreUI() {}
 
 function getFilterSettings() {
 
+
     const filters = { //internally, do not filter aything: all the filtering done by the backend based on these settings 
-        mqThreshold:   parseInt(document.getElementById('min-mapq').value) || 0,
-        vendorFailed:  false,
-        duplicates:    false,
-        secondary:     false,
-        supplementary: false
     };
 
     filters.flagf = MapFlag(FILTER_STATE['filter-paired'], FILTER_STATE['filter-properpair'], FILTER_STATE['filter-secondary'], FILTER_STATE['filter-qcfail'], FILTER_STATE['filter-duplicates'], FILTER_STATE['filter-supplementary']);
@@ -43,13 +39,6 @@ function getFilterSettings() {
     MapStrand(filters);
     filters.tagf        = MapTag(FILTER_STATE['filter-tag-overlap'], FILTER_STATE['filter-tag-nonspanningmate'], FILTER_STATE['filter-tag-splitx'], FILTER_STATE['filter-tag-split'], FILTER_STATE['filter-tag-proper'], FILTER_STATE['filter-tag-improper']);
     filters.tagF        = MapTag(FILTER_STATE['retain-tag-overlap'], FILTER_STATE['retain-tag-nonspanningmate'], FILTER_STATE['retain-tag-splitx'], FILTER_STATE['retain-tag-split'], FILTER_STATE['retain-tag-proper'], FILTER_STATE['retain-tag-improper']);
-    filters.scThreshold  = parseInt(FILTER_STATE['filter-min-soft-clip'])    || 0;
-    filters.scThresholdF = parseInt(FILTER_STATE['retain-min-soft-clip'])    || 0;
-    filters.edThreshold  = parseInt(FILTER_STATE['filter-min-edit-distance']) || 0;
-    filters.edThresholdF = parseInt(FILTER_STATE['retain-max-edit-distance']) || 0;
-    filters.baqThreshold  = parseInt(FILTER_STATE['min-baq']) || 0;
-    filters.baqThresholdF = parseInt(FILTER_STATE['max-baq']) || 0;
-
     console.log("Current filter settings:", filters);
     return filters;
 }
@@ -125,12 +114,12 @@ function Create_Filter_String(Chrom, pos, filters) {
         Tagf:          filters.tagf,
         TagF:          filters.tagF,
         minMapQ:       filters.mqThreshold,
-        SoftClip:      filters.scThreshold,
-        SoftClipF:     filters.scThresholdF,
-        EditDistance:  filters.edThreshold,
-        EditDistanceF: filters.edThresholdF,
-        BAQ:           filters.baqThreshold,
-        BAQF:          filters.baqThresholdF,
+        SoftClip:      FILTER_STATE['filter-min-soft-clip'] || 0,
+        SoftClipF:     FILTER_STATE['retain-min-soft-clip'] || 0,
+        EditDistance:  FILTER_STATE['filter-min-edit-distance'] || 0,
+        EditDistanceF: FILTER_STATE['retain-max-edit-distance'] || 0,
+        BAQ:           FILTER_STATE['min-baq'] || 0,
+        BAQF:          FILTER_STATE['max-baq'] || 0,
         Token:         AppState.selectedReads.size > 0 ? AppState.Token : "",
         XAFilter:      AppState.activeXAFilter.size > 0
                            ? [...AppState.activeXAFilter].join("|")
@@ -149,12 +138,7 @@ async function applyFilters() {
     const variant = AppState.currentVariant;
     if (!variant) return;
 
-    const filters = getFilterSettings();
-    const filter_string = Create_Filter_String(
-        variant.chrom,
-        variant.pos,
-        filters
-    );
+    const filter_string = Create_Filter_String(variant.chrom,variant.pos,getFilterSettings());
 
     // Skip reload if nothing changed
     if (filter_string === lastFilterString) {
@@ -163,108 +147,11 @@ async function applyFilters() {
     }
 
     lastFilterString = filter_string;
-    //const viewAsPairs  = document.getElementById('view-as-pairs').checked;
-
-    // Snapshot current alignment tracks
-    const alignmentTracks = [];
-    AppState.browser.trackViews.forEach(trackView => {
-        if (trackView.track.type === 'alignment') {
-            trackView.track.url = trackView.track.url.split('?')[0]; // strip old filters
-            alignmentTracks.push({
-                name:         trackView.track.name,
-                url:          trackView.track.url,
-                indexURL:     trackView.track.url.replace(/\/bam(?=\/|$)/, '/bai'),
-                height:       trackView.track.height,
-                showCoverage: trackView.track.showCoverage
-            });
-        }
-    });
-
-    // Remove old alignment tracks
-    for (let i = AppState.browser.trackViews.length - 1; i >= 0; i--) {
-        if (AppState.browser.trackViews[i].track.type === 'alignment') {
-            AppState.browser.removeTrack(AppState.browser.trackViews[i].track);
-        }
-    }
-    // Reload tracks with new filters
-    for (const trackConfig of alignmentTracks) {
-        await AppState.browser.loadTrack({
-            name:         trackConfig.name,
-            type:         "alignment",
-            format:       "bam",
-            url:          `${trackConfig.url}${filter_string}`,
-            indexURL:     `${trackConfig.indexURL}${filter_string}`,
-            height:       trackConfig.height,
-            viewAsPairs:  FILTER_STATE["view-as-pairs"] || false,
-            showCoverage: trackConfig.showCoverage,
-            filter:       filters
-        });
-    }
-
+    reloadAlignmentTrack(filter_string);
 
     saveFilters();
     updateFilterSummary();
 }
-// async function applyFiltersx(e) {
-//     if (e && e.target.checked) {
-//         const id = e.target.id;
-//         if (id.startsWith("filter-") || id.startsWith("retain-")) {
-//             const complementId = id.startsWith("filter-")
-//                 ? id.replace("filter-", "retain-")
-//                 : id.replace("retain-", "filter-");
-//             const complement = document.getElementById(complementId);
-//             if (complement.checked) {
-//                 alert(`Unchecking ${complementId} to avoid conflicting filters.`);
-//                 complement.checked = false;
-//             }
-//         }
-//     }
-
-//     const filters      = getFilterSettings();
-//     const currentLocus = AppState.browser.currentLoci()[0];
-//     const viewAsPairs  = document.getElementById('view-as-pairs').checked;
-
-//     // Snapshot current alignment tracks
-//     const alignmentTracks = [];
-//     AppState.browser.trackViews.forEach(trackView => {
-//         if (trackView.track.type === 'alignment') {
-//             trackView.track.url = trackView.track.url.split('?')[0]; // strip old filters
-//             alignmentTracks.push({
-//                 name:         trackView.track.name,
-//                 url:          trackView.track.url,
-//                 indexURL:     trackView.track.url.replace(/\/bam(?=\/|$)/, '/bai'),
-//                 height:       trackView.track.height,
-//                 showCoverage: trackView.track.showCoverage
-//             });
-//         }
-//     });
-
-//     // Remove old alignment tracks
-//     for (let i = AppState.browser.trackViews.length - 1; i >= 0; i--) {
-//         if (AppState.browser.trackViews[i].track.type === 'alignment') {
-//             AppState.browser.removeTrack(AppState.browser.trackViews[i].track);
-//         }
-//     }
-
-//     // Reload tracks with new filters
-//     const filter_string = Create_Filter_String(AppState.Current.Chrom, AppState.Current.Pos, filters);
-//     for (const trackConfig of alignmentTracks) {
-//         await AppState.browser.loadTrack({
-//             name:         trackConfig.name,
-//             type:         "alignment",
-//             format:       "bam",
-//             url:          `${trackConfig.url}${filter_string}`,
-//             indexURL:     `${trackConfig.indexURL}${filter_string}`,
-//             height:       trackConfig.height,
-//             viewAsPairs:  viewAsPairs,
-//             showCoverage: trackConfig.showCoverage,
-//             filter:       filters
-//         });
-//     }
-
-//     AppState.browser.search(currentLocus);
-//     showFilterMessage("Filters applied ✓");
-// }
 
 // function scheduleFilterApplication() {
 //     const statusEl = document.getElementById('filter-status');
@@ -310,10 +197,6 @@ function resetFilters() {
             el.value = 0;
         }
     });
-
-    // Special defaults (important)
-    //document.getElementById("show-spanning")?.checked = true;
-    //document.getElementById("strand-filter")?.value = "both";
 
     updateFilterStateFromUI();
 
