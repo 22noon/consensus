@@ -57,7 +57,8 @@ function debounceApply() {
     }, 150);
 }
 
-function bindFilterEvents() {
+function bindEvents() {
+    //Bind filters
     document.querySelectorAll("[data-filter-id]").forEach(el => {
 
         el.addEventListener("change", (e) => {
@@ -67,6 +68,21 @@ function bindFilterEvents() {
         el.addEventListener("input", debounceApply);
 
     });
+    // Trap mouse events on the IGV div for read selection (Shift+Click)
+    const igvDiv = document.getElementById('igv-div');
+    igvDiv.addEventListener('mousedown', e => {
+        AppState.lastMouseEvent = e;
+    });
+    igvDiv.addEventListener('contextmenu', e => {
+        e.preventDefault();
+    });
+    // Manual position input (Enter key)
+    document.getElementById("manual-position-input")
+        .addEventListener("keydown", function (e) {
+            if (e.key === "Enter") addManualVariantRow();
+        });
+
+
 }
 
 
@@ -126,7 +142,7 @@ function initializeUIEventListeners() {
  */
 console.log("Initializing Interactive Variant Viewer...");
 buildVariantTabs(AppState.variants);
-bindFilterEvents();
+bindEvents();
 initializeIGV();
 console.log("Initialization complete!");
 
