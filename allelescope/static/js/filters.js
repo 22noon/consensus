@@ -20,6 +20,24 @@ function updateFilterStateFromUI() {
             : el.value;
     });
 }
+
+function getFilterStateHash() {
+    const orderedState = {};
+    Object.keys(FILTER_STATE).sort().forEach(key => {
+        orderedState[key] = FILTER_STATE[key];
+    });
+
+    const stateString = JSON.stringify(orderedState);
+    let hash = 0;
+
+    for (let i = 0; i < stateString.length; i++) {
+        hash = ((hash << 5) - hash) + stateString.charCodeAt(i);
+        hash |= 0;
+    }
+
+    return (hash >>> 0).toString(16);
+}
+
 function saveFilters() {}
 function loadFilters() {}
 function restoreUI() {}
@@ -129,7 +147,7 @@ function Create_Filter_String(Chrom, pos, filters) {
     return `?${params.toString()}`;
 }
 
-let lastFilterString = null;
+let lastFilterStateHash = null;
 
 async function applyFilters() {
 
@@ -139,14 +157,10 @@ async function applyFilters() {
     if (!variant) return;
 
     const filter_string = Create_Filter_String(variant.chrom,variant.pos,getFilterSettings());
+    const filterStateHash = getFilterStateHash();
+    if (filterStateHash === lastFilterStateHash) {return;}    // Skip reload if nothing changed
+    lastFilterStateHash = filterStateHash;
 
-    // Skip reload if nothing changed
-    if (filter_string === lastFilterString) {
-        alert("No changes in filter settings detected. Skipping reload.");
-        return;
-    }
-
-    lastFilterString = filter_string;
     reloadAlignmentTrack(filter_string);
 
     saveFilters();
@@ -219,7 +233,7 @@ function updateFilterSummary() {
 
     Object.entries(FILTER_STATE).forEach(([key, value]) => {
 
-        if (!value || value === 0 || value === "both") return;
+        if (!value || value === 0 || value === "both" || value === "0") return;
 
         // Make label readable
         let label = key
