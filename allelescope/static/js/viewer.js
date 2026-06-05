@@ -50,7 +50,7 @@ async function reloadAlignmentTrack(filter_string, options = {}) {
         AppState.browser.trackViews.forEach(tv => {
             if (tv.track.type === 'alignment') {
                 alignmentTracks.push(tv.track);
-                setTimeout(() => { AppState.browser.removeTrack(tv.track); }, 50); // stagger removals to prevent UI freeze
+                AppState.browser.removeTrack(tv.track);  // stagger removals to prevent UI freeze
             }
         });
         // Reload tracks with new filters
@@ -95,4 +95,16 @@ async function reloadAlignmentTrack(filter_string, options = {}) {
 
     // Hide loading indicator
     showLoading(false);
+}
+
+function refreshCurrentView() {
+    const variant = AppState.currentVariant;
+    if (!variant) return;
+
+    const filter_string = Create_Filter_String(variant.chrom,variant.pos,getFilterSettings());
+    const filterStateHash = getFilterStateHash(filter_string);
+    if (filterStateHash === lastFilterStateHash) {return;}    // Skip reload if nothing changed
+    lastFilterStateHash = filterStateHash;
+
+    reloadAlignmentTrack(filter_string);
 }

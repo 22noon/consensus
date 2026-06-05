@@ -1,28 +1,71 @@
-
 <div class="card shadow-sm mt-3">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <strong>Variants</strong>
+  <div class="card-header d-flex justify-content-between align-items-center variant-browser">
 
-        <span id="variant-count" class="text-muted small"></span>
+    <strong>Variants</strong>
 
-        <!-- Optional toggle -->
-        <button id="toggleEmptyTabs"
-                onclick="toggleEmptyTabs()"
-                type="button">
-            Show empty chromosomes
+    <div class="d-flex align-items-center gap-2">
+
+      <span id="variant-count" class="text-muted small"></span>
+
+      <!-- PRESET DROPDOWN -->
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary"
+                type="button"
+                data-bs-toggle="dropdown"
+                title="Presets">
+          <i class="bi bi-gear"></i>
         </button>
+        <div class="dropdown-menu dropdown-menu-end p-2" style="min-width: 260px;">
+
+        <!-- Toggle -->
+            <div class="form-check form-switch mb-2">
+                <input class="form-check-input"
+                    type="checkbox"
+                    id="toggle-empty-tabs-switch">
+                <label class="form-check-label small"
+                    for="toggle-empty-tabs-switch">
+                Show empty chromosomes
+                </label>
+            </div>
+
+            <hr class="my-2">
+
+            <!-- Preset name -->
+            <input type="text"
+                    class="form-control form-control-sm mb-2"
+                    placeholder="Preset name"
+                    id="preset-input">
+
+            <button class="btn btn-primary btn-sm w-100 mb-2"
+                    id="save-preset-btn">
+                Save Current
+            </button>
+
+            <select class="form-select form-select-sm mb-2"
+                    id="preset-select">
+                <option value="">-- Presets --</option>
+            </select>
+
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-primary btn-sm w-50"
+                        id="load-preset-btn">
+                Load
+                </button>
+
+                <button class="btn btn-outline-danger btn-sm w-50"
+                        id="delete-preset-btn">
+                Delete
+                </button>
+            </div>
+
+        </div>
+      </div>
+
     </div>
+  </div>
 
-    <div class="card-body p-2">
-
-        <!-- Chromosome Tabs -->
-        <ul class="nav nav-tabs"
-            id="chromTabs"
-            role="tablist"></ul>
-
-        <!-- Tab Content -->
-        <div class="tab-content mt-3"
-             id="chromTabContent"></div>
-
-    </div>
+  <div class="card-body p-2">
+    <ul class="nav nav-tabs" id="chromTabs" role="tablist"></ul>
+    <div class="tab-content mt-3" id="chromTabContent"></div>
+  </div>
 </div>

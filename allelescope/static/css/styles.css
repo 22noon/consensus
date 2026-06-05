@@ -242,5 +242,6 @@ table {
     background-color: #ffc107 !important;
 }
 
-
-/* Change height: 100vh → flex: 1 and add min-height: 0 */
+.dropdown-menu {
+    z-index: 2000; /* higher than IGV */
+}

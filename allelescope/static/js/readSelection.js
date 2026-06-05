@@ -80,7 +80,9 @@ function removeRead(readName) {
 function clearReadList() {
     if (AppState.selectedReads.size === 0 || confirm('Clear all selected reads?')) {
         AppState.selectedReads.clear();
+        AppState.Token = "";
         updateReadList();
+        refreshCurrentView();
     }
 }
 

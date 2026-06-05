@@ -36,6 +36,7 @@ function addManualVariantRow() {
         activeTab?.classList.remove("tab-empty");
 
         const v = { chrom, pos, ref: "-", alt: "-", info: "Manual" };
+        AppState.variants.push(v);
 
         const row = document.createElement("tr");
         row.classList.add("manual-row");
@@ -43,7 +44,9 @@ function addManualVariantRow() {
             <td>${v.pos}</td>
             <td>${v.ref}</td>
             <td>${v.alt}</td>
-            <td>${v.info}</td>
+            <td class="text-muted small editable-info" contenteditable="true">
+                ${v.info || ""}
+            </td>
         `;
 
         fetch(`${AppState.API_BASE}/api/extract?chrom=${chrom}&pos=${pos}&ref=${AppState.config.igvOptions.reference.fastaURL}`)
@@ -119,4 +122,49 @@ function clearManualVariants() {
     if (AppState.manualVariants[chrom]) {
         AppState.manualVariants[chrom].clear();
     }
+}
+
+const VariantPresets = {
+    KEY: "variantPresets",
+
+    getAll() {
+        return JSON.parse(localStorage.getItem(this.KEY)) || {};
+    },
+
+    savePreset(name, state) {
+        const presets = this.getAll();
+        presets[name] = {
+            ...state,
+            savedAt: Date.now()
+        };
+        localStorage.setItem(this.KEY, JSON.stringify(presets));
+    },
+
+    loadPreset(name) {
+        const presets = this.getAll();
+        return presets[name] || null;
+    },
+
+    deletePreset(name) {
+        const presets = this.getAll();
+        delete presets[name];
+        localStorage.setItem(this.KEY, JSON.stringify(presets));
+    },
+
+    list() {
+        return Object.keys(this.getAll());
+    }
+};
+function saveVariantPreset(name, data) {
+    VariantPresets.savePreset(name, {
+        data,
+        ui: getCurrentUIState()
+    });
+}
+function loadVariantPreset(name) {
+    const preset = VariantPresets.loadPreset(name);
+    if (!preset) return;
+
+    buildVariantTabs(preset.data);
+    restoreUIState(preset.ui);
 }

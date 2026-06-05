@@ -1,3 +1,73 @@
+function createPresetToolbar(dataGetter, onLoad) {
+
+    const presets = JSON.parse(localStorage.getItem("variantPresets") || "{}");
+
+    const input = document.getElementById("preset-input");
+    const select = document.getElementById("preset-select");
+    const saveBtn = document.getElementById("save-preset-btn");
+    const loadBtn = document.getElementById("load-preset-btn");
+    const deleteBtn = document.getElementById("delete-preset-btn");
+
+    if (!input || !select || !saveBtn) {
+        console.warn("Preset UI not found");
+        return;
+    }
+
+    // Populate dropdown
+    function refreshOptions() {
+        select.innerHTML = '<option value="">-- Presets --</option>';
+
+        Object.keys(presets).forEach(name => {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            select.appendChild(opt);
+        });
+    }
+
+    refreshOptions();
+
+    // SAVE
+    saveBtn.onclick = () => {
+        const name = input.value.trim();
+        if (!name) {
+            input.classList.add("is-invalid");
+            return;
+        }
+
+        input.classList.remove("is-invalid");
+
+        presets[name] = {
+            data: dataGetter(),
+            savedAt: Date.now()
+        };
+
+        localStorage.setItem("variantPresets", JSON.stringify(presets));
+        refreshOptions();
+        input.value = "";
+    };
+
+    // LOAD
+    loadBtn.onclick = () => {
+        const name = select.value;
+        if (!name) return;
+
+        onLoad(presets[name].data);
+    };
+
+    // DELETE
+    deleteBtn.onclick = () => {
+        const name = select.value;
+        if (!name) return;
+
+        if (!confirm(`Delete preset "${name}"?`)) return;
+
+        delete presets[name];
+        localStorage.setItem("variantPresets", JSON.stringify(presets));
+        refreshOptions();
+    };
+}
+
 /**
  * IGV Initialization
  */
@@ -131,6 +201,23 @@ function initializeUIEventListeners() {
             e.preventDefault();
         });
     }
+    const infoCell = row.querySelector(".editable-info");
+
+    infoCell.addEventListener("blur", () => {
+        const newValue = infoCell.textContent.trim();
+
+        // update the underlying data object
+        v.info = newValue;
+
+        // if this row is currently selected, update global state
+        if (row.classList.contains("selected")) {
+            window.selectedVariant.info = newValue;
+        }
+    });
+    infoCell.addEventListener("click", (e) => {
+        alert("You can edit this field to add custom notes or annotations for this variant. Click outside the cell when done.");
+        e.stopPropagation();
+    });
 }
 
 
@@ -141,15 +228,24 @@ function initializeUIEventListeners() {
  * Need to ensure that this script is loaded after the DOM elements it interacts with are available, or use deferred initialization in html tag calling this routine    .
  */
 console.log("Initializing Interactive Variant Viewer...");
+initFilterState();
+//loadFilters();         // optional persistence
+//restoreUI();           // update inputs
+//applyFilters();
+populatePresetDropdown();
 buildVariantTabs(AppState.variants);
 bindEvents();
 initializeIGV();
+
+document.addEventListener("DOMContentLoaded", () => {
+    createPresetToolbar(
+        () => AppState.variants,
+        (loadedData) => buildVariantTabs(loadedData)
+    );
+});
+
+
 console.log("Initialization complete!");
 
 
 
-//initFilterState();
-//loadFilters();         // optional persistence
-//restoreUI();           // update inputs
-//applyFilters();
-//populatePresetDropdown();

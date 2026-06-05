@@ -21,13 +21,13 @@ function updateFilterStateFromUI() {
     });
 }
 
-function getFilterStateHash() {
+function getFilterStateHash(filter_string) {
     const orderedState = {};
     Object.keys(FILTER_STATE).sort().forEach(key => {
         orderedState[key] = FILTER_STATE[key];
     });
 
-    const stateString = JSON.stringify(orderedState);
+    const stateString = JSON.stringify(orderedState) + "|" + filter_string;
     let hash = 0;
 
     for (let i = 0; i < stateString.length; i++) {
@@ -38,9 +38,59 @@ function getFilterStateHash() {
     return (hash >>> 0).toString(16);
 }
 
-function saveFilters() {}
-function loadFilters() {}
-function restoreUI() {}
+function saveFilters() {
+    try {
+        localStorage.setItem("igv_filters", JSON.stringify(FILTER_STATE));
+    } catch (e) {
+        console.warn("Failed to save filters:", e);
+    }
+}
+
+function loadFilters() {
+    const saved = localStorage.getItem("igv_filters");
+    if (!saved) return false;
+    try {
+        const parsed = JSON.parse(saved);
+        Object.assign(FILTER_STATE, parsed);
+        return true;
+    } catch (e) {
+        console.warn("Failed to load saved filters:", e);
+        return false;
+    }
+}
+
+function restoreUI() {
+
+    document.querySelectorAll("[data-filter-id]").forEach(el => {
+
+        const id = el.dataset.filterId;
+        const value = FILTER_STATE[id];
+
+        if (value === undefined) return;
+
+        if (el.type === "checkbox") {
+            el.checked = !!value;
+        } else if (el.tagName === "SELECT") {
+            el.value = value;
+        } else {
+            el.value = value;
+        }
+    });
+}
+function initFilterState() {
+
+    document.querySelectorAll("[data-filter-id]").forEach(el => {
+
+        const id = el.dataset.filterId;
+
+        if (el.type === "checkbox") {
+            FILTER_STATE[id] = el.checked;
+        } else {
+            FILTER_STATE[id] = el.value || 0;
+        }
+    });
+}
+
 
 /**
  * Filter Functions
@@ -152,40 +202,10 @@ let lastFilterStateHash = null;
 async function applyFilters() {
 
     updateFilterStateFromUI();
-
-    const variant = AppState.currentVariant;
-    if (!variant) return;
-
-    const filter_string = Create_Filter_String(variant.chrom,variant.pos,getFilterSettings());
-    const filterStateHash = getFilterStateHash();
-    if (filterStateHash === lastFilterStateHash) {return;}    // Skip reload if nothing changed
-    lastFilterStateHash = filterStateHash;
-
-    reloadAlignmentTrack(filter_string);
-
+    refreshCurrentView();
     saveFilters();
     updateFilterSummary();
 }
-
-// function scheduleFilterApplication() {
-//     const statusEl = document.getElementById('filter-status');
-//     statusEl.textContent = 'Pending...';
-//     if (AppState.filterTimeout) clearTimeout(AppState.filterTimeout);
-//     AppState.filterTimeout = setTimeout(() => applyFilters(), 500);
-// }
-
-// function scheduleSoftClipFilterApplication() {
-//     showFilterMessage("Pending...");
-//     if (AppState.filterTimeout) clearTimeout(AppState.filterTimeout);
-//     AppState.filterTimeout = setTimeout(() => {
-//         showFilterMessage("Applying filters...");
-//         setTimeout(() => {
-//             applyFilters();
-//             showFilterMessage("Filters applied ✓");
-//         }, 0); // allow UI repaint before heavy work
-//     }, 500);
-// }
-
 
 /* clear all filters and reset UI, then re-apply (which will reload IGV track with no filters) */
 function resetFilters() {
