@@ -1,12 +1,7 @@
 <div class="card shadow-sm mt-3">
   <div class="card-header d-flex justify-content-between align-items-center variant-browser">
 
-    <strong>Variants</strong>
-
     <div class="d-flex align-items-center gap-2">
-
-      <span id="variant-count" class="text-muted small"></span>
-
       <!-- PRESET DROPDOWN -->
       <div class="dropdown">
         <button class="btn btn-sm btn-outline-secondary"
@@ -41,7 +36,7 @@
                 Save Current
             </button>
 
-            <select class="form-select form-select-sm mb-2"
+            <select id="variant-preset-select" class="form-select form-select-sm mb-2"
                     id="preset-select">
                 <option value="">-- Presets --</option>
             </select>
@@ -62,6 +57,9 @@
       </div>
 
     </div>
+
+    <span id="variant-count" class="text-muted small"></span>
+    <strong class="small text-muted">Variants</strong>
   </div>
 
   <div class="card-body p-2">

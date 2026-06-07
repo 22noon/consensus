@@ -1,3 +1,75 @@
+function initFilterPresetControls() {
+
+    const input = document.getElementById("filter-preset-input");
+    const select = document.getElementById("filter-preset-select");
+    const saveBtn = document.getElementById("filter-save-btn");
+    const loadBtn = document.getElementById("filter-load-btn");
+    const deleteBtn = document.getElementById("filter-delete-btn");
+
+    if (!input || !select) return;
+
+    const presets = JSON.parse(localStorage.getItem("igv_filter_presets") || "{}");
+
+    function refreshOptions() {
+        select.innerHTML = '<option value="">-- Presets --</option>';
+
+        Object.keys(presets).forEach(name => {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            select.appendChild(opt);
+        });
+    }
+
+    refreshOptions();
+
+    // SAVE
+    saveBtn.onclick = () => {
+        alert("Saving current filters as preset. This will not save your current position or variant selection, only the filter settings.");
+        const name = input.value.trim();
+        if (!name) {
+            input.classList.add("is-invalid");
+            return;
+        }
+
+        input.classList.remove("is-invalid");
+
+        presets[name] = {
+            filters: { ...FILTER_STATE },
+            savedAt: Date.now()
+        };
+
+        localStorage.setItem("igv_filter_presets", JSON.stringify(presets));
+        refreshOptions();
+
+        input.value = "";
+    };
+
+    // LOAD
+    loadBtn.onclick = () => {
+        const name = select.value;
+        if (!name) return;
+
+        Object.assign(FILTER_STATE, presets[name].filters);
+
+        restoreUI();
+        applyFilters();
+    };
+
+    // DELETE
+    deleteBtn.onclick = () => {
+        const name = select.value;
+        if (!name) return;
+
+        if (!confirm(`Delete preset "${name}"?`)) return;
+
+        delete presets[name];
+
+        localStorage.setItem("igv_filter_presets", JSON.stringify(presets));
+        refreshOptions();
+    };
+}
+
 /* Start DOM -> FILTER_STATE -> IGV + backend wiring */
 const FILTER_STATE = {};
 

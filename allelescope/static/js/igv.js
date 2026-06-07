@@ -3,7 +3,7 @@ function createPresetToolbar(dataGetter, onLoad) {
     const presets = JSON.parse(localStorage.getItem("variantPresets") || "{}");
 
     const input = document.getElementById("preset-input");
-    const select = document.getElementById("preset-select");
+    const select = document.getElementById("variant-preset-select");
     const saveBtn = document.getElementById("save-preset-btn");
     const loadBtn = document.getElementById("load-preset-btn");
     const deleteBtn = document.getElementById("delete-preset-btn");
@@ -232,7 +232,8 @@ initFilterState();
 //loadFilters();         // optional persistence
 //restoreUI();           // update inputs
 //applyFilters();
-populatePresetDropdown();
+initFilterPresetControls();
+//populatePresetDropdown();
 buildVariantTabs(AppState.variants);
 bindEvents();
 initializeIGV();
