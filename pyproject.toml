@@ -1,6 +1,6 @@
 [project]
 name = "allelescope"
-version = "0.1.0"
+version = "0.1.02"
 description = "Broswer for visually analysing variants"
 authors = [
     {name = "Chandana Tennakoon"}
@@ -15,3 +15,17 @@ dependencies = [
 [build-system]
 requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [
+    { include = "allelescope" }
+]
+
+include = [
+    { path = "allelescope/templates/**", format = ["sdist", "wheel"] }
+]
+
+[project.scripts]
+start_server = "allelescope.file_server:main"
+build_variant_browser = "allelescope.build_variant_browser:main"
+generate_viewer = "allelescope.generate_viewer:main"

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import io
 
-from flask import Flask, send_from_directory, Response, request, jsonify,send_file, after_this_request
+from flask import Flask, send_from_directory, Response, request, jsonify,send_file, redirect 
 import tempfile
 import urllib.parse
 
@@ -13,7 +13,7 @@ import sys
 import re
 import hashlib
 from pathlib import Path
-from process_variant import process_variant
+from .process_variant import process_variant
 import shutil
 
 
@@ -463,22 +463,61 @@ def extract_bam(browser=None):
 # Static routes (original server)
 # -----------------------------
 
-@app.route('/')
+# @app.route('/')
+# @app.route("/<path:browser>")
+# def index(browser=None):
+#     if browser is None:
+#         serverpath = DATA_DIR
+#     else:
+#         serverpath = DATA_DIR / browser
+
+#     # If it's a directory, serve the HTML file from within it
+#     if serverpath.is_dir():
+#         print("INDEX HIT:", browser, serverpath, flush=True)
+#         return send_from_directory(serverpath, 'interactive_variants.html')
+
+#     # Otherwise treat it as a file request
+#     print("FILE HIT:", DATA_DIR, browser, flush=True)
+#     return send_from_directory(DATA_DIR, browser, mimetype=get_mimetype(browser))
+
+@app.route("/")
 @app.route("/<path:browser>")
+@app.route("/<path:browser>/")
 def index(browser=None):
-    if browser is None:
-        serverpath = DATA_DIR
-    else:
-        serverpath = DATA_DIR / browser
+    serverpath = DATA_DIR if browser is None else DATA_DIR / browser
 
-    # If it's a directory, serve the HTML file from within it
     if serverpath.is_dir():
-        print("INDEX HIT:", browser, serverpath, flush=True)
-        return send_from_directory(serverpath, 'interactive_variants.html')
+        if browser is not None and not request.path.endswith("/"):
+            print("redirecting: ", DATA_DIR, request.path, flush=True)
+            return redirect(request.path + "/", code=308)
 
-    # Otherwise treat it as a file request
-    print("FILE HIT:", DATA_DIR, browser, flush=True)
+        print("Serve interactive variants : ", DATA_DIR, serverpath, flush=True)
+        return send_from_directory(serverpath, "interactive_variants.html")
+
+    print("SERVERPATH: ", DATA_DIR, serverpath, flush=True)
     return send_from_directory(DATA_DIR, browser, mimetype=get_mimetype(browser))
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=args.port, debug=True)
+def main():
+    parser = argparse.ArgumentParser(description="Start Allelescope file server")
+    parser.add_argument("--data-dir", "-d", default=".")
+    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--host", default="0.0.0.0")
+    parser.add_argument("--debug", action="store_true")
+
+    args = parser.parse_args()
+
+    global DATA_DIR, CACHE_ROOT
+
+    DATA_DIR = Path(args.data_dir).resolve()
+    CACHE_ROOT = DATA_DIR / "cache"
+    CACHE_ROOT.mkdir(exist_ok=True)
+
+    if not DATA_DIR.is_dir():
+        print(f"DATA_DIR does not exist: {DATA_DIR}", file=sys.stderr)
+        sys.exit(1)
+
+    app.run(host=args.host, port=args.port, debug=args.debug)
+
+
+if __name__ == "__main__":
+    main()
