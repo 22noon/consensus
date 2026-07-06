@@ -24,27 +24,25 @@ function updateReadList() {
     applyReadHighlighting();
 
     if (AppState.selectedReads.size > 0) {
-        const readList = Array.from(AppState.selectedReads).map(r => `
-            <div class="read-item d-flex align-items-center justify-content-between px-2 py-1 mb-1 rounded"
-                <span class="read-name text-truncate" >
-                    ${r}
-                </span>
-                <div class="read-actions d-flex gap-1">
-                    <button class="btn btn-sm btn-outline-danger"
-                            onclick="removeRead('${r}')"
-                            title="Remove">
-                        ✕
-                    </button>
-                </div>
-            </div>
-        `).join('');
+        const readList = Array.from(AppState.selectedReads).map(r =>
+            `<div class="read-item">
+                <a href="#" onclick="searchForRead('${r}'); return false;"
+                   style="color:#0066cc; text-decoration:none;">${r}</a>
+                <a href="#" onclick="removeRead('${r}'); return false;"
+                   style="color:red; text-decoration:none; margin-left:10px;">[✕]</a>
+            </div>`
+        ).join('');
 
         listDiv.innerHTML = `
             <div class="selected-header">
                 <strong>Selected Reads (${AppState.selectedReads.size})</strong>
             </div>
 
-            <div class="read-action-bar mt-2 d-flex gap-2">
+            <div class="read-list">
+                ${readList}
+            </div>
+
+            <div class="read-action-bar">
                 <button class="btn btn-primary btn-sm"
                         onclick="IsolateSelectedReads()">
                     <i class="bi bi-funnel-fill me-1"></i>
@@ -63,11 +61,6 @@ function updateReadList() {
                     Export
                 </button>
             </div>
-
-            <div class="read-list mt-2">
-                ${readList}
-            </div>
-
         `;
 
     } else {
