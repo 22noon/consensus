@@ -1,3 +1,75 @@
+function initFilterPresetControls() {
+
+    const input = document.getElementById("filter-preset-input");
+    const select = document.getElementById("filter-preset-select");
+    const saveBtn = document.getElementById("filter-save-btn");
+    const loadBtn = document.getElementById("filter-load-btn");
+    const deleteBtn = document.getElementById("filter-delete-btn");
+
+    if (!input || !select) return;
+
+    const presets = JSON.parse(localStorage.getItem("igv_filter_presets") || "{}");
+
+    function refreshOptions() {
+        select.innerHTML = '<option value="">-- Presets --</option>';
+
+        Object.keys(presets).forEach(name => {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            select.appendChild(opt);
+        });
+    }
+
+    refreshOptions();
+
+    // SAVE
+    saveBtn.onclick = () => {
+        alert("Saving current filters as preset. This will not save your current position or variant selection, only the filter settings.");
+        const name = input.value.trim();
+        if (!name) {
+            input.classList.add("is-invalid");
+            return;
+        }
+
+        input.classList.remove("is-invalid");
+
+        presets[name] = {
+            filters: { ...FILTER_STATE },
+            savedAt: Date.now()
+        };
+
+        localStorage.setItem("igv_filter_presets", JSON.stringify(presets));
+        refreshOptions();
+
+        input.value = "";
+    };
+
+    // LOAD
+    loadBtn.onclick = () => {
+        const name = select.value;
+        if (!name) return;
+
+        Object.assign(FILTER_STATE, presets[name].filters);
+
+        restoreUI();
+        applyFilters();
+    };
+
+    // DELETE
+    deleteBtn.onclick = () => {
+        const name = select.value;
+        if (!name) return;
+
+        if (!confirm(`Delete preset "${name}"?`)) return;
+
+        delete presets[name];
+
+        localStorage.setItem("igv_filter_presets", JSON.stringify(presets));
+        refreshOptions();
+    };
+}
+
 /* Start DOM -> FILTER_STATE -> IGV + backend wiring */
 const FILTER_STATE = {};
 
@@ -20,90 +92,96 @@ function updateFilterStateFromUI() {
             : el.value;
     });
 }
-function saveFilters() {}
-function loadFilters() {}
-function restoreUI() {}
+
+function getFilterStateHash(filter_string) {
+    const orderedState = {};
+    Object.keys(FILTER_STATE).sort().forEach(key => {
+        orderedState[key] = FILTER_STATE[key];
+    });
+
+    const stateString = JSON.stringify(orderedState) + "|" + filter_string;
+    let hash = 0;
+
+    for (let i = 0; i < stateString.length; i++) {
+        hash = ((hash << 5) - hash) + stateString.charCodeAt(i);
+        hash |= 0;
+    }
+
+    return (hash >>> 0).toString(16);
+}
+
+function saveFilters() {
+    try {
+        localStorage.setItem("igv_filters", JSON.stringify(FILTER_STATE));
+    } catch (e) {
+        console.warn("Failed to save filters:", e);
+    }
+}
+
+function loadFilters() {
+    const saved = localStorage.getItem("igv_filters");
+    if (!saved) return false;
+    try {
+        const parsed = JSON.parse(saved);
+        Object.assign(FILTER_STATE, parsed);
+        return true;
+    } catch (e) {
+        console.warn("Failed to load saved filters:", e);
+        return false;
+    }
+}
+
+function restoreUI() {
+
+    document.querySelectorAll("[data-filter-id]").forEach(el => {
+
+        const id = el.dataset.filterId;
+        const value = FILTER_STATE[id];
+
+        if (value === undefined) return;
+
+        if (el.type === "checkbox") {
+            el.checked = !!value;
+        } else if (el.tagName === "SELECT") {
+            el.value = value;
+        } else {
+            el.value = value;
+        }
+    });
+}
+function initFilterState() {
+
+    document.querySelectorAll("[data-filter-id]").forEach(el => {
+
+        const id = el.dataset.filterId;
+
+        if (el.type === "checkbox") {
+            FILTER_STATE[id] = el.checked;
+        } else {
+            FILTER_STATE[id] = el.value || 0;
+        }
+    });
+}
+
 
 /**
  * Filter Functions
  */
-// temp fix for decoupling filter state from IGV track config until we implement dynamic in-track filtering
-function safeChecked(id, defaultVal=false) {
-    return document.getElementById(id)?.checked ?? defaultVal;
-}
-
-function safeValue(id, defaultVal=0) {
-    const el = document.getElementById(id);
-    return el ? parseInt(el.value || defaultVal) : defaultVal;
-}
-// END: temp fix for decoupling filter state from IGV track config until we implement dynamic in-track filtering
 
 function getFilterSettings() {
 
-    // Exclude flags
-    const QcFailed      = FILTER_STATE['filter-qcfail'] || false;
-    const Duplicated    = FILTER_STATE['filter-duplicates'] || false;
-    const Secondary     = FILTER_STATE['filter-secondary'] || false;
-    const Supplementary = FILTER_STATE['filter-supplementary'] || false;
-    const ReadPaired    = FILTER_STATE['filter-paired'] || false;
-    const ProperPair    = FILTER_STATE['filter-properpair'] || false;
 
-    // Include flags
-    const FqcFailed      = FILTER_STATE['retain-qcfail'] || false;
-    const Fduplicated    = FILTER_STATE['retain-duplicates'] || false;
-    const Fsecondary     = FILTER_STATE['retain-secondary'] || false;
-    const Fsupplementary = FILTER_STATE['retain-supplementary'] || false;
-    const FreadPaired    = FILTER_STATE['retain-paired'] || false;
-    const FproperPair    = FILTER_STATE['retain-properpair'] || false;
-
-    // Exclude tags
-    const overlap         = FILTER_STATE['filter-tag-overlap'] || false;
-    const nonSpanningMate = FILTER_STATE['filter-tag-nonspanningmate'] || false;
-    const splitX          = FILTER_STATE['filter-tag-splitx'] || false;
-    const split           = FILTER_STATE['filter-tag-split'] || false;
-    const Proper          = FILTER_STATE['filter-tag-proper'] || false;
-    const Improper        = FILTER_STATE['filter-tag-improper'] || false;
-
-    // Include tags
-    const Foverlap         = FILTER_STATE['retain-tag-overlap'] || false;
-    const FnonSpanningMate = FILTER_STATE['retain-tag-nonspanningmate'] || false;
-    const FsplitX          = FILTER_STATE['retain-tag-splitx'] || false;
-    const Fsplit           = FILTER_STATE['retain-tag-split'] || false;
-    const Fproper          = FILTER_STATE['retain-tag-proper'] || false;
-    const Fimproper        = FILTER_STATE['retain-tag-improper'] || false;
-
-    const filters = {
-        mqThreshold: parseInt(FILTER_STATE['min-mapq'] || 0),
-        vendorFailed: true,
-        duplicates: true,
-        secondary: true,
-        supplementary: true
+    const filters = { //internally, do not filter aything: all the filtering done by the backend based on these settings 
     };
 
-    // Bitmask generation (unchanged)
-    filters.flagf = MapFlag(ReadPaired, ProperPair, Secondary, QcFailed, Duplicated, Supplementary);
-    filters.flagF = MapFlag(FreadPaired, FproperPair, Fsecondary, FqcFailed, Fduplicated, Fsupplementary);
-
+    filters.flagf = MapFlag(FILTER_STATE['filter-paired'], FILTER_STATE['filter-properpair'], FILTER_STATE['filter-secondary'], FILTER_STATE['filter-qcfail'], FILTER_STATE['filter-duplicates'], FILTER_STATE['filter-supplementary']);
+    filters.flagF = MapFlag(FILTER_STATE['retain-paired'], FILTER_STATE['retain-properpair'], FILTER_STATE['retain-secondary'], FILTER_STATE['retain-qcfail'], FILTER_STATE['retain-duplicates'], FILTER_STATE['retain-supplementary']);
     MapStrand(filters);
-
-    filters.tagf = MapTag(overlap, nonSpanningMate, splitX, split, Proper, Improper);
-    filters.tagF = MapTag(Foverlap, FnonSpanningMate, FsplitX, Fsplit, Fproper, Fimproper);
-
-    // Numeric filters
-    filters.scThreshold  = parseInt(FILTER_STATE['filter-min-soft-clip'] || 0);
-    filters.scThresholdF = parseInt(FILTER_STATE['retain-min-soft-clip'] || 0);
-
-    filters.edThreshold  = parseInt(FILTER_STATE['filter-min-edit-distance'] || 0);
-    filters.edThresholdF = parseInt(FILTER_STATE['retain-max-edit-distance'] || 0);
-
-    filters.baqThreshold  = parseInt(FILTER_STATE['min-baq'] || 0);
-    filters.baqThresholdF = parseInt(FILTER_STATE['max-baq'] || 0);
-
+    filters.tagf        = MapTag(FILTER_STATE['filter-tag-overlap'], FILTER_STATE['filter-tag-nonspanningmate'], FILTER_STATE['filter-tag-splitx'], FILTER_STATE['filter-tag-split'], FILTER_STATE['filter-tag-proper'], FILTER_STATE['filter-tag-improper']);
+    filters.tagF        = MapTag(FILTER_STATE['retain-tag-overlap'], FILTER_STATE['retain-tag-nonspanningmate'], FILTER_STATE['retain-tag-splitx'], FILTER_STATE['retain-tag-split'], FILTER_STATE['retain-tag-proper'], FILTER_STATE['retain-tag-improper']);
     console.log("Current filter settings:", filters);
-
     return filters;
 }
-
 
 function MapTag(overlap, nonSpanningMate, splitX, split, proper, improper) {
     const TAG_OVERLAP           = 0x1;
@@ -176,12 +254,12 @@ function Create_Filter_String(Chrom, pos, filters) {
         Tagf:          filters.tagf,
         TagF:          filters.tagF,
         minMapQ:       filters.mqThreshold,
-        SoftClip:      filters.scThreshold,
-        SoftClipF:     filters.scThresholdF,
-        EditDistance:  filters.edThreshold,
-        EditDistanceF: filters.edThresholdF,
-        BAQ:           filters.baqThreshold,
-        BAQF:          filters.baqThresholdF,
+        SoftClip:      FILTER_STATE['filter-min-soft-clip'] || 0,
+        SoftClipF:     FILTER_STATE['retain-min-soft-clip'] || 0,
+        EditDistance:  FILTER_STATE['filter-min-edit-distance'] || 0,
+        EditDistanceF: FILTER_STATE['retain-max-edit-distance'] || 0,
+        BAQ:           FILTER_STATE['min-baq'] || 0,
+        BAQF:          FILTER_STATE['max-baq'] || 0,
         Token:         AppState.selectedReads.size > 0 ? AppState.Token : "",
         XAFilter:      AppState.activeXAFilter.size > 0
                            ? [...AppState.activeXAFilter].join("|")
@@ -191,58 +269,14 @@ function Create_Filter_String(Chrom, pos, filters) {
     return `?${params.toString()}`;
 }
 
-
-let lastFilterString = null;
+let lastFilterStateHash = null;
 
 async function applyFilters() {
 
     updateFilterStateFromUI();
-
-    const variant = AppState.currentVariant;
-    if (!variant) return;
-
-    const filters = getFilterSettings();
-    const filter_string = Create_Filter_String(
-        variant.chrom,
-        variant.pos,
-        filters
-    );
-
-    // Skip reload if nothing changed
-    if (filter_string === lastFilterString) {
-        return;
-    }
-
-    lastFilterString = filter_string;
-    await reloadAlignmentTrack(filter_string, {
-        viewAsPairs: FILTER_STATE["view-as-pairs"]
-    });
-
+    refreshCurrentView();
     saveFilters();
     updateFilterSummary();
-}
-
-/* avoid mutual exclusivity conflicts by auto-unchecking the complement when one is toggled */
-function enforceMutualExclusion(el) {
-
-    const id = el.id;
-
-    if (id.startsWith("filter-") || id.startsWith("retain-")) {
-
-        const complementId = id.startsWith("filter-")
-            ? id.replace("filter-", "retain-")
-            : id.replace("retain-", "filter-");
-
-        const other = document.getElementById(complementId);
-
-        if (other && other.checked) {
-            other.checked = false;
-            alert("This filter is mutually exclusive with its complement. The other filter has been unchecked.");
-
-            // Update state immediately
-            FILTER_STATE[complementId] = false;
-        }
-    }
 }
 
 /* clear all filters and reset UI, then re-apply (which will reload IGV track with no filters) */
@@ -270,10 +304,6 @@ function resetFilters() {
         }
     });
 
-    // Special defaults (important)
-    //document.getElementById("show-spanning")?.checked = true;
-    //document.getElementById("strand-filter")?.value = "both";
-
     updateFilterStateFromUI();
 
     // Clear cache
@@ -295,7 +325,7 @@ function updateFilterSummary() {
 
     Object.entries(FILTER_STATE).forEach(([key, value]) => {
 
-        if (!value || value === 0 || value === "both") return;
+        if (!value || value === 0 || value === "both" || value === "0") return;
 
         // Make label readable
         let label = key
@@ -315,165 +345,3 @@ function updateFilterSummary() {
     }
 }
 
-// async function applyFilters() {
-
-//     updateFilterStateFromUI();
-
-//     if (!AppState.browser || !AppState.currentVariant) return;
-
-//     const variant = AppState.currentVariant;
-
-//     const filters = getFilterSettings();
-
-//     const filter_string = Create_Filter_String(
-//         variant.chrom,
-//         variant.pos,
-//         filters
-//     );
-
-//     console.log("Applying backend filters:", filter_string);
-
-//     // Remove existing alignment tracks
-//     const tracks = AppState.browser.trackViews;
-
-//     for (let i = tracks.length - 1; i >= 0; i--) {
-//         if (tracks[i].track.type === "alignment") {
-//             AppState.browser.removeTrack(tracks[i].track);
-//         }
-//     }
-
-//     // Reload filtered track
-//     await AppState.browser.loadTrack({
-//         type: "alignment",
-//         format: "bam",
-
-//         url: `${AppState.API_BASE}/api/bam${filter_string}`,
-//         indexURL: `${AppState.API_BASE}/api/bai${filter_string}`,
-
-//         name: "Filtered Reads"
-//     });
-
-//     saveFilters();
-// }
-// ``
-function scheduleFilterApplication() {
-    const statusEl = document.getElementById('filter-status');
-    statusEl.textContent = 'Pending...';
-    if (AppState.filterTimeout) clearTimeout(AppState.filterTimeout);
-    AppState.filterTimeout = setTimeout(() => applyFilters(), 500);
-}
-
-function scheduleSoftClipFilterApplication() {
-    showFilterMessage("Pending...");
-    if (AppState.filterTimeout) clearTimeout(AppState.filterTimeout);
-    AppState.filterTimeout = setTimeout(() => {
-        showFilterMessage("Applying filters...");
-        setTimeout(() => {
-            applyFilters();
-            showFilterMessage("Filters applied ✓");
-        }, 0); // allow UI repaint before heavy work
-    }, 500);
-}
-
-function buildTrackFilterFunction() {
-    return function (alignment) {
-
-        // MAPQ filter
-        const minMapQ = parseInt(FILTER_STATE["min-mapq"] || 0);
-        if (minMapQ && alignment.mapq < minMapQ) {
-            return false;
-        }
-
-        // BAQ filter (if available)
-        const minBaq = parseInt(FILTER_STATE["min-baq"] || 0);
-        if (minBaq && alignment.qual < minBaq) {
-            return false;
-        }
-
-        // Strand filter
-        const strand = FILTER_STATE["strand-filter"];
-        if (strand === "plus" && alignment.strand !== "+") return false;
-        if (strand === "minus" && alignment.strand !== "-") return false;
-
-        return true;
-    };
-}
-
-function getPresets() {
-    return JSON.parse(localStorage.getItem("igv_filter_presets") || "{}");
-}
-
-function savePresets(presets) {
-    localStorage.setItem("igv_filter_presets", JSON.stringify(presets));
-}
-
-function populatePresetDropdown() {
-
-    const select = document.getElementById("preset-select");
-    if (!select) return;
-
-    const presets = getPresets();
-
-    select.innerHTML = '<option value="">-- Presets --</option>';
-
-    Object.keys(presets).forEach(name => {
-        const opt = document.createElement("option");
-        opt.value = name;
-        opt.textContent = name;
-        select.appendChild(opt);
-    });
-}
-
-function savePresetPrompt() {
-
-    const name = prompt("Enter preset name:");
-    if (!name) return;
-
-    const presets = getPresets();
-
-    presets[name] = { ...FILTER_STATE };
-
-    savePresets(presets);
-    populatePresetDropdown();
-
-    alert("Preset saved");
-}
-
-function loadPreset() {
-
-    const select = document.getElementById("preset-select");
-    const name = select.value;
-
-    if (!name) return;
-
-    const presets = getPresets();
-    const preset = presets[name];
-
-    if (!preset) return;
-
-    // Apply to state
-    Object.assign(FILTER_STATE, preset);
-
-    // Update UI
-    restoreUI();
-
-    // Apply filters
-    applyFilters();
-}
-
-function deletePreset() {
-
-    const select = document.getElementById("preset-select");
-    const name = select.value;
-
-    if (!name) return;
-
-    if (!confirm(`Delete preset "${name}"?`)) return;
-
-    const presets = getPresets();
-
-    delete presets[name];
-
-    savePresets(presets);
-    populatePresetDropdown();
-}

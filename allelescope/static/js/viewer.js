@@ -15,50 +15,127 @@
  *   <script src="igv.js"></script>
  *   <script src="viewer.js"></script>
  */
+function applyColorScheme() {
+    const colorBy = document.getElementById("color-by-select")?.value;
+    const tag = document.getElementById("color-tag-input")?.value;
 
-// document.addEventListener('DOMContentLoaded', async function () {
-//     console.log("Initializing Interactive Variant Viewer...");
+    if (!AppState.browser) return;
 
-//     document.getElementById("manual-position-input")
-//         .addEventListener("keydown", function (e) {
-//             if (e.key === "Enter") addManualVariantRow();
-//         });
+    AppState.browser.trackViews.forEach(trackView => {
+        const track = trackView.track;
 
-//     buildVariantTabs(AppState.variants);
-//     initializeEventListeners();
-//     await initializeIGV();
+        if (track.type === "alignment") {
+            // ✅ colorBy lives on track.alignmentTrack, NOT track
+            const alignmentTrack = track.alignmentTrack;
+            if (!alignmentTrack) return;
 
-//     // Trap mouse events on the IGV div for read selection (Shift+Click)
-//     const igvDiv = document.getElementById('igv-div');
-//     igvDiv.addEventListener('mousedown', e => {
-//         AppState.lastMouseEvent = e;
-//     });
-//     igvDiv.addEventListener('contextmenu', e => {
-//         e.preventDefault();
-//     });
+            if (!colorBy || colorBy === "none") {
+                alignmentTrack.colorBy = undefined;
+            } else if (colorBy === "tag") {
+                alignmentTrack.colorBy = `tag:${tag || "RG"}`;
+                // Ensure a color table exists for tag coloring
+                if (!alignmentTrack.colorTable) {
+                    alignmentTrack.colorTable = new Map(); // igv will create its own
+                }
+            } else {
+                alignmentTrack.colorBy = colorBy; // e.g. "strand", "pairOrientation", etc.
+            }
 
-//     console.log("Initialization complete!");
-// });
+            trackView.repaintViews();
+        }
+    });
+}
 
-document.addEventListener('DOMContentLoaded', async function () {
-    console.log("Initializing Interactive Variant Viewer...");
+function showLoading(show) {
+    const el = document.getElementById("loading-indicator");
+    if (!el) return;
 
-    buildVariantTabs(AppState.variants);
+    el.style.display = show ? "block" : "none";
+}
 
-    // Initialize IGV first
-    await initializeIGV();
 
-    // Then initialize filter system
-    initFilterState();
-    loadFilters();
-    restoreUI();
-    bindFilterEvents();
+async function reloadAlignmentTrack(filter_string, options = {}) {
 
-    // Then apply filters
-    applyFilters();
+    const {
+        name = "Spanning Reads Only",
+        viewAsPairs = false,
+        filter = {
+            mqThreshold:  0, 
+            vendorFailed:  false,
+            duplicates:    false,
+            secondary:     false,
+            supplementary: false
+        },
+        locus = AppState.browser.referenceFrameList[0].locusSearchString,
+    } = options;
+    if (!AppState.browser) return;
 
-    // Then UI event listeners (non-filter)
-    initializeUIEventListeners();
 
-    console.log("Initialization complete!");
-});
+    //  show loading indicator
+    showLoading(true);
+
+    try {
+
+        const alignmentTracks = [];
+        AppState.browser.trackViews.forEach(tv => {
+            if (tv.track.type === 'alignment') {
+                alignmentTracks.push(tv.track);
+                AppState.browser.removeTrack(tv.track);  // stagger removals to prevent UI freeze
+            }
+        });
+        // Reload tracks with new filters
+        if (alignmentTracks.length === 0) {
+            await AppState.browser.loadTrack({
+                name:         "Spanning Reads Only",
+                type:         "alignment",
+                format:       "bam",
+                url:          `${AppState.API_BASE}/api/bam${filter_string}`,
+                indexURL:     `${AppState.API_BASE}/api/bai${filter_string}`,
+                height:       300,
+                viewAsPairs:  FILTER_STATE["view-as-pairs"] || false,
+                showCoverage: true,
+                filter:       filter
+            })
+        }
+        else
+        {
+            for (const trackConfig of alignmentTracks) {
+                let URL = `${trackConfig.url.split('?')[0]}`;
+                await AppState.browser.loadTrack({
+                    name:         trackConfig.name,
+                    type:         "alignment",
+                    format:       "bam",
+                    url:          `${URL}${filter_string}`,
+                    indexURL:     `${URL.replace(/\/bam(?=\/|$)/, '/bai')}${filter_string}`,
+                    height:       trackConfig.height,
+                    viewAsPairs:  FILTER_STATE["view-as-pairs"] || false,
+                    showCoverage: trackConfig.showCoverage,
+                    filter:       filter
+                });
+            }
+        }
+        //  Restore locus (prevents visual jump)
+        if (locus) {
+            AppState.browser.search(locus);
+        }
+        applyColorScheme();
+
+    } catch (err) {
+        console.error("Error reloading track:", err);
+    }
+
+    // Hide loading indicator
+    showLoading(false);
+}
+
+function refreshCurrentView() {
+    const variant = AppState.currentVariant;
+    if (!variant) return;
+
+    const filter_string = Create_Filter_String(variant.chrom,variant.pos,getFilterSettings());
+    const filterStateHash = getFilterStateHash(filter_string);
+    if (filterStateHash === lastFilterStateHash) {return;}    // Skip reload if nothing changed
+    lastFilterStateHash = filterStateHash;
+
+    reloadAlignmentTrack(filter_string);
+}

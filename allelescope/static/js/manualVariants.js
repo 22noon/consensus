@@ -36,6 +36,7 @@ function addManualVariantRow() {
         activeTab?.classList.remove("tab-empty");
 
         const v = { chrom, pos, ref: "-", alt: "-", info: "Manual" };
+        AppState.variants.push(v);
 
         const row = document.createElement("tr");
         row.classList.add("manual-row");
@@ -43,7 +44,9 @@ function addManualVariantRow() {
             <td>${v.pos}</td>
             <td>${v.ref}</td>
             <td>${v.alt}</td>
-            <td>${v.info}</td>
+            <td class="text-muted small editable-info" contenteditable="true">
+                ${v.info || ""}
+            </td>
         `;
 
         fetch(`${AppState.API_BASE}/api/extract?chrom=${chrom}&pos=${pos}&ref=${AppState.config.igvOptions.reference.fastaURL}`)

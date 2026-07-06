@@ -102,11 +102,14 @@ function buildVariantTabs(data) {
 
             const row = document.createElement("tr");
             row.style.cursor = "pointer";
+
             row.innerHTML = `
                 <td>${v.pos}</td>
                 <td>${v.ref}</td>
                 <td>${v.alt}</td>
-                <td class="text-muted small">${v.info}</td>
+                <td class="text-muted small editable-info" contenteditable="true">
+                    ${v.info || ""}
+                </td>
             `;
 
             row.addEventListener("click", () => {

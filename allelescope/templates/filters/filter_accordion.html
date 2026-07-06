@@ -1,40 +1,71 @@
-<div class="d-flex justify-content-between align-items-center mb-2">
+<div class="card shadow-sm mt-3">
 
+<div class="card-header d-flex justify-content-between align-items-center variant-browser">
+
+
+    <div class="dropdown">
+
+        <button class="btn btn-sm btn-outline-secondary"
+                type="button"
+                data-bs-toggle="dropdown"
+                title="Filter settings">
+
+            <i class="bi bi-gear"></i>
+        </button>
+
+        <div class="dropdown-menu dropdown-menu-end p-2" style="min-width: 260px;">
+
+            <!-- Reset -->
+            <button class="btn btn-sm btn-outline-secondary w-100 mb-2"
+                    onclick="resetFilters()">
+                Reset filters
+            </button>
+
+            <hr class="my-2">
+
+            <!-- Preset name -->
+            <input type="text"
+                   class="form-control form-control-sm mb-2"
+                   placeholder="Preset name"
+                   id="filter-preset-input">
+
+            <!-- Save -->
+            <button class="btn btn-sm btn-primary w-100 mb-2"
+                    id="filter-save-btn">
+                Save Current
+            </button>
+
+            <!-- Preset select -->
+            <select id="filter-preset-select"
+                    class="form-select form-select-sm mb-2">
+                <option value="">-- Presets --</option>
+            </select>
+
+            <!-- Load/Delete -->
+            <div class="d-flex gap-2">
+                <button class="btn btn-sm btn-outline-primary w-50"
+                        id="filter-load-btn">
+                    Load
+                </button>
+
+                <button class="btn btn-sm btn-outline-danger w-50"
+                        id="filter-delete-btn">
+                    Delete
+                </button>
+            </div>
+
+        </div>
+    </div>
     <strong class="small text-muted">Filters</strong>
 
-    <button class="btn btn-sm btn-outline-secondary"
-            onclick="resetFilters()">
-        Reset
-    </button>
-
 </div>
-<div class="d-flex gap-2 mb-2">
 
-    <select id="preset-select" class="form-select form-select-sm">
-        <option value="">-- Presets --</option>
-    </select>
-
-    <button class="btn btn-sm btn-outline-primary"
-            onclick="savePresetPrompt()">
-        Save
-    </button>
-
-    <button class="btn btn-sm btn-outline-secondary"
-            onclick="loadPreset()">
-        Load
-    </button>
-
-    <button class="btn btn-sm btn-outline-danger"
-            onclick="deletePreset()">
-        Delete
-    </button>
-
-</div>
-<div class="accordion mb-3" id="readFilterAccordion">
+<div class="accordion" id="readFilterAccordion">
 
     {% include "filters/value_filters.html" %}
     {% include "filters/baq_filters.html" %}
     {% include "filters/include_filters.html" %}
     {% include "filters/exclude_filters.html" %}
 
+</div>
 </div>
