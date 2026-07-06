@@ -15,6 +15,36 @@
  *   <script src="igv.js"></script>
  *   <script src="viewer.js"></script>
  */
+function applyColorScheme() {
+    const colorBy = document.getElementById("color-by-select")?.value;
+    const tag = document.getElementById("color-tag-input")?.value;
+
+    if (!AppState.browser) return;
+
+    AppState.browser.trackViews.forEach(trackView => {
+        const track = trackView.track;
+
+        if (track.type === "alignment") {
+            // ✅ colorBy lives on track.alignmentTrack, NOT track
+            const alignmentTrack = track.alignmentTrack;
+            if (!alignmentTrack) return;
+
+            if (!colorBy || colorBy === "none") {
+                alignmentTrack.colorBy = undefined;
+            } else if (colorBy === "tag") {
+                alignmentTrack.colorBy = `tag:${tag || "RG"}`;
+                // Ensure a color table exists for tag coloring
+                if (!alignmentTrack.colorTable) {
+                    alignmentTrack.colorTable = new Map(); // igv will create its own
+                }
+            } else {
+                alignmentTrack.colorBy = colorBy; // e.g. "strand", "pairOrientation", etc.
+            }
+
+            trackView.repaintViews();
+        }
+    });
+}
 
 function showLoading(show) {
     const el = document.getElementById("loading-indicator");
@@ -88,6 +118,7 @@ async function reloadAlignmentTrack(filter_string, options = {}) {
         if (locus) {
             AppState.browser.search(locus);
         }
+        applyColorScheme();
 
     } catch (err) {
         console.error("Error reloading track:", err);

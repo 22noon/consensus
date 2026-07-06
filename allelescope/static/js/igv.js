@@ -1,3 +1,29 @@
+function initColorControls() {
+
+    const select = document.getElementById("color-by-select");
+    const tagInput = document.getElementById("color-tag-input");
+
+    if (!select) return;
+
+    select.addEventListener("change", () => {
+
+        const value = select.value;
+
+        // Show/hide tag input
+        if (value === "tag") {
+            tagInput.style.display = "block";
+        } else {
+            tagInput.style.display = "none";
+        }
+
+        applyColorScheme();
+    });
+
+    tagInput.addEventListener("input", () => {
+        applyColorScheme();
+    });
+}
+
 function createPresetToolbar(dataGetter, onLoad) {
 
     const presets = JSON.parse(localStorage.getItem("variantPresets") || "{}");
@@ -51,6 +77,8 @@ function createPresetToolbar(dataGetter, onLoad) {
     loadBtn.onclick = () => {
         const name = select.value;
         if (!name) return;
+        alert(`Loading preset "${name}". This will overwrite your current view.`);
+        console.log("Loading preset data:", presets[name].data);
 
         onLoad(presets[name].data);
     };
@@ -237,6 +265,7 @@ initFilterPresetControls();
 buildVariantTabs(AppState.variants);
 bindEvents();
 initializeIGV();
+initColorControls();
 
 document.addEventListener("DOMContentLoaded", () => {
     createPresetToolbar(
