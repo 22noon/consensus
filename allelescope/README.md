@@ -3,6 +3,7 @@
 Allelescope is an interactive, browser-based variant viewer. Each **browser instance** is a self-contained directory of processed alignment, reference, and variant files alongside a  viewer script. A lightweight file server serves one or more instances from a shared **data directory**, and users navigate to each instance in their web browser. The speciality of Allelescope is it allows deeper analysis of reads supporting a variant, offering advanced filtering capabilities that cannot be replicated in browsers like IGV for technical reasons.
 
 Allelescope requires minimally a sorted bam file and a reference. If a VCF file is available variant locations in it can automatically be added to the browser. 
+
 ---
 ## Installation
 Allelescope can be obtained from PyPI. You can simply type 
@@ -90,12 +91,24 @@ The following tools are assumed to be installed in the current software environm
 | `tabix` | Only with `-v` | indexes the VCF |
 | `bgzip` | Only with `-v` | used if the supplied VCF is not already gzipped |
 
-All three are available through [htslib](https://www.htslib.org/download/) or via conda/mamba:
+All three are available through [htslib](https://www.htslib.org/download/) or via conda/micromamba. The package was developed using samtools 1.19.2 and htslib 1.19, so it is advised to be cautious using very old versions of samtools that might lack some features. The following can instructs how to build an environment to run Allelescope.
+
+```bash
+# Using conda
+conda create -n allelescope -c conda-forge -c bioconda samtools=1.19.2 htslib=1.19 
+conda activate allelescope
+
+# Using micromamba
+micromamba create -n allelescope -c conda-forge -c bioconda samtools=1.19.2 htslib=1.19 
+micromamba activate allelescope
+```
+
+If you already have a suitable active environment, you can also install directly:
 
 ```bash
 conda install -c bioconda samtools htslib
 ```
-The package was developed using samtools 1.19.2 Using htslib 1.19, so it is adviced to be cautious using very old versions of samtools that might lack some features.
+
 
 
 ---
@@ -179,10 +192,38 @@ start_server --data-dir /path/to/Browsers --port 8000
 Once the server is running, navigate to:
 
 ```
-http://localhost:<port>/<relative-path>/interactive_variants.html
+http://localhost:<port>/<relative-path>
 ```
 
 where `<relative-path>` is the path from the data directory to the specific instance directory.
+
+## Accessing from a local machine via SSH tunnel
+
+If the file server is running on a remote host, you can forward the server port to your local machine with SSH and then open the browser locally.
+
+On your local machine, run:
+
+```bash
+ssh -L <port>:localhost:<port> user@remote.host
+```
+
+Then open the URL in Chrome, Edge, or Firefox:
+
+```
+http://localhost:<port>/<relative-path>
+```
+
+For example, if the remote server uses a port 9000, adjust the tunnel like:
+
+```bash
+ssh -L 9000:localhost:8000 user@remote.host
+```
+
+and then open:
+
+```
+http://localhost:9000/<relative-path>
+```
 
 ### Multi-instance example
 
