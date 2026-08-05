@@ -4,6 +4,8 @@ Allelescope is an interactive, browser-based variant viewer. Each **browser inst
 
 Allelescope requires minimally a sorted bam file and a reference. If a VCF file is available variant locations in it can automatically be added to the browser. 
 
+For instructions on using the generated viewer, see the [Allelescope user guide](USER_GUIDE.md).
+
 ---
 ## Installation
 Allelescope can be obtained from PyPI. You can simply type 

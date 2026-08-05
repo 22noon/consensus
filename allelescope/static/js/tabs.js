@@ -2,18 +2,31 @@
  * Variant Tab Functions
  */
 
-function toggleEmptyTabs() {
-    const btn           = document.getElementById("toggleEmptyTabs");
+function toggleEmptyTabs(showEmpty) {
     const tabsContainer = document.getElementById("chromTabs");
-    const isShowing     = tabsContainer.classList.toggle("show-empty");
+    if (!tabsContainer) return;
 
-    btn.textContent = isShowing ? "Hide empty chromosomes" : "Show empty chromosomes";
+    const isShowing = typeof showEmpty === "boolean"
+        ? showEmpty
+        : !tabsContainer.classList.contains("show-empty");
+
+    tabsContainer.classList.toggle("show-empty", isShowing);
 
     if (!isShowing) {
         const firstVisible = tabsContainer.querySelector(".nav-link:not(.tab-empty)");
         bootstrap?.Tab.getOrCreateInstance(firstVisible)?.show();
     }
 }
+
+function initEmptyTabsToggle() {
+    const toggle = document.getElementById("toggle-empty-tabs-switch");
+    if (!toggle) return;
+
+    toggleEmptyTabs(toggle.checked);
+    toggle.addEventListener("change", () => toggleEmptyTabs(toggle.checked));
+}
+
+document.addEventListener("DOMContentLoaded", initEmptyTabsToggle);
 
 function buildVariantTabs(data) {
     const tabsContainer    = document.getElementById("chromTabs");
@@ -22,6 +35,10 @@ function buildVariantTabs(data) {
 
     tabsContainer.innerHTML    = "";
     contentContainer.innerHTML = "";
+
+    // Keep the checkbox selection effective after filters or presets rebuild tabs.
+    const emptyTabsToggle = document.getElementById("toggle-empty-tabs-switch");
+    tabsContainer.classList.toggle("show-empty", Boolean(emptyTabsToggle?.checked));
 
     if (!data || data.length === 0) {
         totalCountEl.textContent = "No variants";
