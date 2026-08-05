@@ -128,6 +128,40 @@ async function reloadAlignmentTrack(filter_string, options = {}) {
     showLoading(false);
 }
 
+async function loadSpanningTrackForActiveTab() {
+    const spanningToggle = document.getElementById("show-spanning");
+    const tabsContainer = document.getElementById("chromTabs");
+    const activePane = document.querySelector("#chromTabContent .tab-pane.active");
+
+    // Normal variant selection owns the spanning track. This fallback is only
+    // needed when every chromosome is an empty chromosome tab.
+    if (!AppState.browser || !spanningToggle?.checked || !tabsContainer || !activePane ||
+        !tabsContainer.querySelector(".nav-link") ||
+        tabsContainer.querySelector(".nav-link:not(.tab-empty)")) {
+        return;
+    }
+
+    const chrom = activePane.id;
+    if (AppState.currentVariant?.chrom === chrom && AppState.currentVariant.pos === 1 &&
+        AppState.spanningTrackLoaded) {
+        return;
+    }
+
+    const flankSize = parseInt(document.getElementById("flank-size")?.value) || 100;
+    //const variant = { chrom, pos: 1, ref: "", alt: "", info: "" };
+    const locus = `${chrom}:1-${flankSize + 1}`;
+
+    //AppState.currentVariant = variant;
+    AppState.Current.Chrom = chrom;
+    AppState.Current.Pos = 0;
+
+    await reloadAlignmentTrack(
+        Create_Filter_String(chrom, 0, getFilterSettings()),
+        { locus }
+    );
+    AppState.spanningTrackLoaded = true;
+}
+
 function refreshCurrentView() {
     const variant = AppState.currentVariant;
     if (!variant) return;

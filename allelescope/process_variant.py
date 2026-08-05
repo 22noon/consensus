@@ -32,6 +32,23 @@ def process_variant(
     calmd_bam  = bam_dir / f"variant_{Chrom}_{Pos}.calmd.bam"
     src_bam    = str(base / source_bam)
 
+    try:
+        position = int(Pos)
+    except (TypeError, ValueError):
+        position = 0
+
+    if position <= 0:
+        # The tab placeholders use position 0.  They have no variant to
+        # extract reads around, but downstream code still expects both the
+        # source and filtered BAM paths to be valid and indexed.
+        with pysam.AlignmentFile(src_bam, "rb") as source:
+            for bam_path in (out_bam, calmd_bam):
+                print(f"Creating empty BAM {bam_path} for {Chrom}:{Pos}", flush=True)
+                with pysam.AlignmentFile(str(bam_path), "wb", header=source.header):
+                    pass
+                pysam.index(str(bam_path))
+        return 1
+
     # Already processed — skip
     if out_bam.exists():
         return 0

@@ -162,4 +162,13 @@ function buildVariantTabs(data) {
         pane.appendChild(wrapper);
         contentContainer.appendChild(pane);
     });
+
+    if (!tabsContainer.dataset.emptyTabTrackListener) {
+        tabsContainer.addEventListener("shown.bs.tab", () => {
+            if (typeof loadSpanningTrackForActiveTab === "function") {
+                loadSpanningTrackForActiveTab();
+            }
+        });
+        tabsContainer.dataset.emptyTabTrackListener = "true";
+    }
 }

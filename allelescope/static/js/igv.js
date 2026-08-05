@@ -119,6 +119,7 @@ async function initializeIGV() {
     });
 
     AppState.browser.on('trackclick', handleTrackClick);
+    loadSpanningTrackForActiveTab();
 }
 
 /**
@@ -276,6 +277,5 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 console.log("Initialization complete!");
-
 
 
