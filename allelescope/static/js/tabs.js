@@ -66,6 +66,14 @@ function buildVariantTabs(data) {
         a.localeCompare(b, undefined, { numeric: true })
     );
 
+    // Do not leave the tab bar empty when every chromosome only has its
+    // empty-chromosome placeholder. This is equivalent to enabling the switch.
+    if (variantCount === 0 && chroms.length > 0) {
+        const emptyTabsToggle = document.getElementById("toggle-empty-tabs-switch");
+        if (emptyTabsToggle) emptyTabsToggle.checked = true;
+        tabsContainer.classList.add("show-empty");
+    }
+
     chroms.forEach((chrom, index) => {
         let variants = grouped[chrom];
         if (variants[0]["pos"] === 0) variants = [];
