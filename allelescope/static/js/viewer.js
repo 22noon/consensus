@@ -15,8 +15,12 @@
  *   <script src="igv.js"></script>
  *   <script src="viewer.js"></script>
  */
+#TODO: Add a color-by selector for the alignment track (e.g., strand, pair orientation, tag, etc.)
 function applyColorScheme() {
-    const colorBy = document.getElementById("color-by-select")?.value;
+    const colorBySelect = document.getElementById("color-by-select");
+    if (!colorBySelect) return;
+
+    const colorBy = colorBySelect.value;
     const tag = document.getElementById("color-tag-input")?.value;
 
     if (!AppState.browser) return;
@@ -92,6 +96,7 @@ async function reloadAlignmentTrack(filter_string, options = {}) {
                 url:          `${AppState.API_BASE}/api/bam${filter_string}`,
                 indexURL:     `${AppState.API_BASE}/api/bai${filter_string}`,
                 height:       300,
+                colorBy:      "strand",
                 viewAsPairs:  FILTER_STATE["view-as-pairs"] || false,
                 showCoverage: true,
                 filter:       filter
@@ -108,6 +113,7 @@ async function reloadAlignmentTrack(filter_string, options = {}) {
                     url:          `${URL}${filter_string}`,
                     indexURL:     `${URL.replace(/\/bam(?=\/|$)/, '/bai')}${filter_string}`,
                     height:       trackConfig.height,
+                    colorBy:      "strand",
                     viewAsPairs:  FILTER_STATE["view-as-pairs"] || false,
                     showCoverage: trackConfig.showCoverage,
                     filter:       filter
