@@ -328,8 +328,11 @@ def extract_mates(
 
         read = tag_read(read, XO)
 
-        allele = get_allele_at_base(read, start)
-        indels = get_indels_at_base(read, start)
+        # ``start`` is part of the public, 1-based API.  The tag helpers
+        # operate on pysam's 0-based reference coordinates.
+        target_pos = start - 1
+        allele = get_allele_at_base(read, target_pos)
+        indels = get_indels_at_base(read, target_pos)
         signed_len, summary_str, max_del, max_ins = summarise_indels(indels)
         allele_counts[allele] += 1
 

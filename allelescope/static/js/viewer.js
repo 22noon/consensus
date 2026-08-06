@@ -15,7 +15,7 @@
  *   <script src="igv.js"></script>
  *   <script src="viewer.js"></script>
  */
-#TODO: Add a color-by selector for the alignment track (e.g., strand, pair orientation, tag, etc.)
+//TODO: Add a color-by selector for the alignment track (e.g., strand, pair orientation, tag, etc.)
 function applyColorScheme() {
     const colorBySelect = document.getElementById("color-by-select");
     if (!colorBySelect) return;
