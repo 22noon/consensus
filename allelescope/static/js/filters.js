@@ -149,6 +149,21 @@ function restoreUI() {
         }
     });
 }
+
+function syncSoftClipQuickFilter(toggle) {
+    const inputId = toggle.id === "filter-softclips"
+        ? "filter-min-soft-clip"
+        : "retain-min-soft-clip";
+    const thresholdInput = document.getElementById(inputId);
+
+    if (thresholdInput) thresholdInput.value = toggle.checked ? "1" : "0";
+}
+
+function initSoftClipQuickFilters() {
+    document.querySelectorAll("#filter-softclips, #retain-softclips").forEach(toggle => {
+        toggle.addEventListener("change", () => syncSoftClipQuickFilter(toggle));
+    });
+}
 function initFilterState() {
 
     document.querySelectorAll("[data-filter-id]").forEach(el => {
@@ -344,4 +359,3 @@ function updateFilterSummary() {
             .join("");
     }
 }
-

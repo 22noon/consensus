@@ -140,6 +140,9 @@ function enforceMutualExclusion(el) {
 
         if (other && other.checked) {
             other.checked = false;
+            if (other.id === "filter-softclips" || other.id === "retain-softclips") {
+                syncSoftClipQuickFilter(other);
+            }
             alert("This filter is mutually exclusive with its complement. The other filter has been unchecked.");
 
             // Update state immediately
@@ -167,6 +170,7 @@ function bindEvents() {
         el.addEventListener("input", debounceApply);
 
     });
+    initSoftClipQuickFilters();
     // Trap mouse events on the IGV div for read selection (Shift+Click)
     const igvDiv = document.getElementById('igv-div');
     igvDiv.addEventListener('mousedown', e => {
@@ -277,5 +281,4 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 console.log("Initialization complete!");
-
 
