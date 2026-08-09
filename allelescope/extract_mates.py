@@ -230,7 +230,7 @@ def get_pair_orientation(read):
 def tag_read(read, XO):
     if read.has_tag('SA'):
         XO |= Tag_bits['SPLIT']
-        return read
+        #return read
     orientation = get_pair_orientation(read)
     if read.is_paired:
         read.set_tag('XR', orientation)
@@ -241,6 +241,23 @@ def tag_read(read, XO):
     read.set_tag('XO', XO)
     return read
 
+"""
+
+Extract every alignment (split or not) overlapping a genomic region of
+interest into ``out_bam``, and the mates / split-alignment partners of
+those overlapping reads into ``mates_bam``.
+
+Assumes the following are already available in scope (imported from the
+existing project modules, same as the original implementation):
+
+    Tag_bits                -> dict of RG-flag bit values
+    tag_read(read, XO)      -> sets the XO tag on ``read`` and returns it
+    calculate_softclip_lengths(read)
+    parse_sa_tag(sa_string)
+    get_allele_at_base(read, target_pos)
+    get_indels_at_base(read, target_pos)
+    summarise_indels(indels)
+"""
 
 def extract_mates(
     src_bam: str,
@@ -253,20 +270,34 @@ def extract_mates(
     """
     Extract overlapping reads and their mates for a genomic region.
 
-    Replaces the original process_mates_optimized() with a signature
-    matching the packaged API. allele_counts is managed internally and
-    returned to the caller — the CLI uses it to write the indel stats file.
+    OVERLAP semantics
+    ------------------
+    A given alignment record is tagged OVERLAP only if BOTH of the
+    following hold:
+      1. It physically crosses the region of interest itself 
+      2. Both mates of the fragment (R1 and R2) have an alignment
+         that crosses the region of interest. This is meant to capture
+         "independent sequencing evidence from both strands of the
+         insert" -- a lone read (or only one mate) crossing the region
+         is not enough
+
+    Any alignment (of either mate, split or not) that does not itself
+    cross the region but belongs to a fragment where at least one other
+    alignment does, is fetched separately and written to ``mates_bam``,
+    tagged NON_SPANNING_MATE (paired-end mate) or SPLITX (split-read
+    partner) as appropriate.
 
     Args:
         src_bam:   Input BAM path (e.g. alignment.markdup.bam)
         out_bam:   Output BAM for overlapping reads at the locus
-        mates_bam: Output BAM for fetched mates
+        mates_bam: Output BAM for fetched mates / split partners
         chrom:     Chromosome name
         start:     1-based start position
         end:       1-based end position
 
     Returns:
-        allele_counts: dict mapping allele string -> read count
+        allele_counts: dict mapping allele string -> read count (one
+        observation per physical read/fragment, deterministic).
     """
     allele_counts = defaultdict(int)
 
@@ -289,121 +320,151 @@ def extract_mates(
     overlap_bam = pysam.AlignmentFile(out_bam,   "wb", header=header)
     mate        = pysam.AlignmentFile(mates_bam, "wb", header=header)
 
-    # Pass 1: count non-split reads per query name to detect overlapping pairs
-    print(f"Scanning region {chrom}:{start}-{end} for overlapping reads and their mates...")
-    overlap_count = defaultdict(int)
-    for read in bam.fetch(chrom, start - 1, end):
-        if read.is_unmapped:
-            continue
-        if not read.has_tag('SA'):
-            overlap_count[read.query_name] += 1
-    overlaps = {r for r, count in overlap_count.items() if count > 1}
+    # ``start``/``end`` are part of the public, 1-based API. The tag
+    # helpers and pysam both operate on 0-based, half-open coordinates.
+    region_start0 = start - 1
+    region_end0   = end
+    target_pos    = start - 1
 
-    # Pass 2: write overlapping reads, collect mate and split positions
-    print(f"Writing overlapping reads to {out_bam} and collecting mate positions...")
-    mate_regions  = defaultdict()
-    split_reads   = defaultdict(set)
-    
-    XA_dict = {}  # dictionary to store XA tag values for reads, keyed by query_name for adding to mates 
-    for read in bam.fetch(chrom, start - 1, end):
+    def overlaps_region(read) -> bool:
+        return read.reference_start < region_end0 and read.reference_end > region_start0
+
+    written_records = set()               # (query_name, reference_start) already in overlap_bam
+    XA_dict          = {}                 # query_name -> chosen allele call, propagated onto mates
+    pending          = defaultdict(list)  # query_name -> [(chrom, pos, kind), ...]
+    covering         = defaultdict(list)  # query_name -> [(is_supplementary, reference_start, allele), ...]
+
+    # ---- Pass 1a: which mates (R1/R2) have a PRIMARY alignment crossing the region ----
+    print(f"Scanning region {chrom}:{start}-{end} for overlapping alignments >(split or not)<...")
+    buffered_reads = list(bam.fetch(chrom, region_start0, region_end0))
+
+    overlap_mate = defaultdict(set)  # query_name -> subset of {1, 2}
+    for read in buffered_reads:
         if read.is_unmapped:
             continue
+        # Only primary alignments count as independent sequencing evidence --
+        # a supplementary/split segment crossing the region is the same
+        # strand/fragment as its primary, not a second, independent mate.
+        #if read.is_supplementary or read.is_secondary:
+        #    continue
+        if read.is_read1:
+            overlap_mate[read.query_name].add(1)
+        elif read.is_read2:
+            overlap_mate[read.query_name].add(2)
+        # else: unpaired / single-end -- no mate distinction possible,
+        # so it can never satisfy the "both mates cross" condition below.
+
+    def crosses_as_pair(qname: str) -> bool:
+        return overlap_mate[qname] == {1, 2}
+
+    # ---- Pass 1b: write every alignment overlapping the region, split or not ----
+    print(f"Writing overlapping alignments to {out_bam}...")
+    for read in buffered_reads:
+        if read.is_unmapped:
+            continue
+#        if read.query_name != "M02063:376:000000000-DYVFW:1:1101:22715:19471":
+#            continue
 
         XO = read.get_tag('XO') if read.has_tag('XO') else 0
-
-        if read.has_tag('SA'):
-            for loc in parse_sa_tag(read.get_tag('SA')):
-                if read.reference_name != loc['rname']:
-                    continue
-                split_reads[read.query_name].add((loc['rname'], loc['pos']))
-        else:
-            mate_chrom = read.next_reference_name
-            mate_pos   = read.next_reference_start
-            if read.query_name in overlaps:
-                XO |= Tag_bits['OVERLAP']
-            if read.query_name not in mate_regions:
-                mate_regions[read.query_name] = (mate_chrom, mate_pos)
-            else:
-                del mate_regions[read.query_name]
-
+        if overlaps_region(read) and crosses_as_pair(read.query_name):
+            XO |= Tag_bits['OVERLAP']
         read = tag_read(read, XO)
 
-        # ``start`` is part of the public, 1-based API.  The tag helpers
-        # operate on pysam's 0-based reference coordinates.
-        target_pos = start - 1
         allele = get_allele_at_base(read, target_pos)
         indels = get_indels_at_base(read, target_pos)
         signed_len, summary_str, max_del, max_ins = summarise_indels(indels)
-        allele_counts[allele] += 1
 
-        read.set_tag("XA", allele,      value_type="Z"); XA_dict[read.query_name] = allele  
+        # Defer the allele_counts decision -- other alignments of this same
+        # read may still be coming later in fetch order (e.g. a duplication
+        # where both split segments independently cover target_pos).
+        if read.reference_start <= target_pos < read.reference_end:
+            covering[read.query_name].append(
+                (read.is_supplementary, read.reference_start, allele)
+            )
+
+        read.set_tag("XA", allele,      value_type="Z")
         read.set_tag("XI", signed_len,  value_type="i")
         read.set_tag("XD", max_del,     value_type="i")
         read.set_tag("XN", max_ins,     value_type="i")
         read.set_tag("XS", summary_str, value_type="Z")
 
         overlap_bam.write(calculate_softclip_lengths(read))
+        written_records.add((read.query_name, read.reference_start))
+
+        if read.has_tag('SA'):
+            for loc in parse_sa_tag(read.get_tag('SA')):
+                # SA tag positions are 1-based per the SAM spec.
+                pending[read.query_name].append((loc['rname'], loc['pos'] - 1, 'SPLIT'))
+
+        if read.is_paired and not read.mate_is_unmapped and read.next_reference_name is not None:
+            pending[read.query_name].append(
+                (read.next_reference_name, read.next_reference_start, 'MATE')
+            )
 
     overlap_bam.close()
+    # ---- Deterministically resolve one allele call per physical read ----
+    # Preference order: non-supplementary (primary) alignment first; among
+    # remaining ties, leftmost reference_start. Independent of fetch order.
+    for qname, candidates in covering.items():
+        _, _, allele = min(candidates, key=lambda c: (c[0], c[1]))
+        allele_counts[allele] += 1
+        XA_dict[qname] = allele
 
-    # Build scan positions from collected mates and splits
-    scan_positions       = defaultdict(set)
-    scan_positions_count = defaultdict(int)
-    mates_to_check  = set(mate_regions.keys())
-    splits_to_check = set(split_reads.keys())
-
-    for read_name, (mate_chrom, mate_pos) in mate_regions.items():
-        if mate_chrom is None or mate_pos is None or mate_pos < 0:
-            continue
-        scan_positions[mate_chrom].add(mate_pos)
-        scan_positions_count[(mate_chrom, mate_pos)] += 1
-
-    for read_name, split_info in split_reads.items():
-        for mate_chrom, mate_pos in split_info:
-            if mate_chrom is None or mate_pos is None or mate_pos < 0:
-                print(f"Skipping split read {read_name} with invalid mate info: {mate_chrom}:{mate_pos}")
+    # ---- Build the set of "other alignments" that still need fetching ----
+    # Anything whose target (chrom, pos) matches an already-written record
+    # for the same read is dropped here (e.g. the "both segments already
+    # overlap" case needs no separate mate fetch).
+    to_check      = defaultdict(list)
+    scan_by_chrom = defaultdict(set)
+    for qname, targets in pending.items():
+        for c, p, kind in targets:
+            if c is None or p is None or p < 0:
                 continue
-            scan_positions[mate_chrom].add(mate_pos)
-            scan_positions_count[(mate_chrom, mate_pos)] += 1
+            if (qname, p) in written_records:
+                continue
+            to_check[qname].append((c, p, kind))
+            scan_by_chrom[c].add(p)
 
-    # Fetch mates
-    print(f"Fetching mates for {len(scan_positions_count)} positions and writing to {mates_bam}...")
+    # ---- Pass 2: fetch and write the outstanding mates / split partners ----
     WINDOW = 300
-    for mate_chrom in scan_positions:
-        for mate_pos in sorted(scan_positions[mate_chrom], reverse=True):
-            if scan_positions_count[(mate_chrom, mate_pos)] == 0:
-                continue
+    n_targets = sum(len(v) for v in to_check.values())
+    print(f"Fetching {n_targets} additional alignment(s) for {len(to_check)} read(s) "
+          f"and writing to {mates_bam}...")
+
+    for scan_chrom, positions in scan_by_chrom.items():
+        for pos in sorted(positions, reverse=True):
             try:
-                for mate_read in bam.fetch(mate_chrom, max(0, mate_pos - WINDOW), mate_pos + WINDOW):
-                    XO = mate_read.get_tag('XO') if mate_read.has_tag('XO') else 0
+                for cand in bam.fetch(scan_chrom, max(0, pos - WINDOW), pos + WINDOW):
+                    if cand.is_unmapped:
+                        continue
+                    key = (cand.query_name, cand.reference_start)
+                    if key in written_records:
+                        continue
+                    if cand.query_name not in to_check:
+                        continue
 
-                    if mate_read.query_name in mates_to_check:
-                        expected_chrom, expected_pos = mate_regions.get(mate_read.query_name, (None, None))
-                        if expected_chrom is None or expected_pos is None:
-                            print(f"Skipping read {mate_read.query_name} with missing mate info")
-                        else:
-                            if mate_read.reference_name != expected_chrom or mate_read.reference_start != expected_pos:
-                                continue
-                        scan_positions_count[mate_regions[mate_read.query_name]] -= 1
-                        XO |= Tag_bits['NON_SPANNING_MATE']
-                        mate_read = tag_read(mate_read, XO)
-                        mate_read.set_tag("XA", XA_dict.get(mate_read.query_name, ""), value_type="Z")
-                        mate.write(calculate_softclip_lengths(mate_read))
-                        mates_to_check.remove(mate_read.query_name)
-
-                    if mate_read.query_name in splits_to_check:
-                        split_info = split_reads.get(mate_read.query_name, set())
-                        if (mate_read.reference_name, mate_read.reference_start + 1) in split_info:
-                            mate_read.set_tag('XO', XO | Tag_bits['SPLITX'])
-                            mate.write(calculate_softclip_lengths(mate_read))
-                            splits_to_check.remove(mate_read.query_name)
-
+                    remaining = to_check[cand.query_name]
+                    for i, (exp_chrom, exp_pos, kind) in enumerate(remaining):
+                        if cand.reference_name == exp_chrom and cand.reference_start == exp_pos:
+                            XO = cand.get_tag('XO') if cand.has_tag('XO') else 0
+                            XO |= Tag_bits['NON_SPANNING_MATE'] if kind == 'MATE' else Tag_bits['SPLITX']
+                            cand = tag_read(cand, XO)
+                            cand.set_tag("XA", XA_dict.get(cand.query_name, ""), value_type="Z")
+                            mate.write(calculate_softclip_lengths(cand))
+                            written_records.add(key)
+                            del remaining[i]
+                            if not remaining:
+                                del to_check[cand.query_name]
+                            break
             except pysam.utils.SamtoolsError:
                 pass
 
     mate.close()
     bam.close()
-    print(f"Done processing mates. Remaining reads without found mates: {len(mates_to_check)}")
+
+    n_missing = sum(len(v) for v in to_check.values())
+    print(f"Done processing mates. {n_missing} expected alignment(s) across "
+          f"{len(to_check)} read(s) not found.")
 
     return allele_counts
 
