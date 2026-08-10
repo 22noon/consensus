@@ -180,6 +180,10 @@ Tag_bits = {
     'QCFAIL':           0x200,
     'DUPLICATE':        0x400,
     'SUPPLEMENTARY':    0x800,
+    'F1R2':             0x1000,
+    'R1F2':             0x2000,
+    'F1F2':             0x4000,
+    'R1R2':             0x8000,
 }
 
 
@@ -234,6 +238,8 @@ def tag_read(read, XO):
     orientation = get_pair_orientation(read)
     if read.is_paired:
         read.set_tag('XR', orientation)
+        if orientation in Tag_bits:
+            XO |= Tag_bits[orientation]
         if orientation != "F1R2" or not read.is_proper_pair:
             XO |= Tag_bits['IMPROPER']
         else:

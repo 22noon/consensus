@@ -86,7 +86,6 @@ function initFilterState() {
 function updateFilterStateFromUI() {
     document.querySelectorAll("[data-filter-id]").forEach(el => {
         const id = el.dataset.filterId;
-
         FILTER_STATE[id] = (el.type === "checkbox")
             ? el.checked
             : el.value;
@@ -192,19 +191,23 @@ function getFilterSettings() {
     filters.flagf = MapFlag(FILTER_STATE['filter-paired'], FILTER_STATE['filter-properpair'], FILTER_STATE['filter-secondary'], FILTER_STATE['filter-qcfail'], FILTER_STATE['filter-duplicates'], FILTER_STATE['filter-supplementary']);
     filters.flagF = MapFlag(FILTER_STATE['retain-paired'], FILTER_STATE['retain-properpair'], FILTER_STATE['retain-secondary'], FILTER_STATE['retain-qcfail'], FILTER_STATE['retain-duplicates'], FILTER_STATE['retain-supplementary']);
     MapStrand(filters);
-    filters.tagf        = MapTag(FILTER_STATE['filter-tag-overlap'], FILTER_STATE['filter-tag-nonspanningmate'], FILTER_STATE['filter-tag-splitx'], FILTER_STATE['filter-tag-split'], FILTER_STATE['filter-tag-proper'], FILTER_STATE['filter-tag-improper']);
-    filters.tagF        = MapTag(FILTER_STATE['retain-tag-overlap'], FILTER_STATE['retain-tag-nonspanningmate'], FILTER_STATE['retain-tag-splitx'], FILTER_STATE['retain-tag-split'], FILTER_STATE['retain-tag-proper'], FILTER_STATE['retain-tag-improper']);
+    filters.tagf        = MapTag(FILTER_STATE['filter-tag-overlap'], FILTER_STATE['filter-tag-nonspanningmate'], FILTER_STATE['filter-tag-splitx'], FILTER_STATE['filter-tag-split'], FILTER_STATE['filter-tag-proper'], FILTER_STATE['filter-tag-improper'], FILTER_STATE['filter-tag-f1r2'], FILTER_STATE['filter-tag-r1f2'], FILTER_STATE['filter-tag-f1f2'], FILTER_STATE['filter-tag-r1r2']);
+    filters.tagF        = MapTag(FILTER_STATE['retain-tag-overlap'], FILTER_STATE['retain-tag-nonspanningmate'], FILTER_STATE['retain-tag-splitx'], FILTER_STATE['retain-tag-split'], FILTER_STATE['retain-tag-proper'], FILTER_STATE['filter-tag-improper'], FILTER_STATE['retain-tag-f1r2'], FILTER_STATE['retain-tag-r1f2'], FILTER_STATE['retain-tag-f1f2'], FILTER_STATE['retain-tag-r1r2']);
     console.log("Current filter settings:", filters);
     return filters;
 }
 
-function MapTag(overlap, nonSpanningMate, splitX, split, proper, improper) {
+function MapTag(overlap, nonSpanningMate, splitX, split, proper, improper, f1r2, r1f2, f1f2, r1r2) {
     const TAG_OVERLAP           = 0x1;
     const TAG_NON_SPANNING_MATE = 0x2;
     const TAG_SPLIT_X           = 0x4;
     const TAG_SPLIT             = 0x8;
     const TAG_PROPER            = 0x10;
     const TAG_IMPROPER          = 0x20;
+    const TAG_F1R2              = 0x1000;
+    const TAG_R1F2              = 0x2000;
+    const TAG_F1F2              = 0x4000;
+    const TAG_R1R2              = 0x8000;
 
     let combinedTag = 0;
     if (overlap)         combinedTag |= TAG_OVERLAP;
@@ -213,6 +216,10 @@ function MapTag(overlap, nonSpanningMate, splitX, split, proper, improper) {
     if (split)           combinedTag |= TAG_SPLIT;
     if (proper)          combinedTag |= TAG_PROPER;
     if (improper)        combinedTag |= TAG_IMPROPER;
+    if (f1r2)            combinedTag |= TAG_F1R2;
+    if (r1f2)            combinedTag |= TAG_R1F2;
+    if (f1f2)            combinedTag |= TAG_F1F2;
+    if (r1r2)            combinedTag |= TAG_R1R2;
 
     return combinedTag;
 }
