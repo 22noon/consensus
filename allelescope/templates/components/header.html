@@ -1,4 +1,57 @@
 <div class="d-flex align-items-center p-3 mb-3 bg-light border rounded shadow-sm">
     <img src="/static/images/allelescope.png" style="height:40px;">
-    <h4 class="m-0 ms-2">Allelescope</h4>
+    <h4 class="m-0 ms-2 flex-grow-1">Allelescope</h4>
+    
+    <div class="dropdown">
+        <button class="btn btn-outline-secondary btn-sm" type="button" id="cacheMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="bi bi-gear"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="cacheMenuButton">
+            <li><h6 class="dropdown-header">Cache Management</h6></li>
+            <li><button class="dropdown-item" onclick="getCacheInfo()">Current local Usage: <span id="cache-size">Loading...</span></button></li>
+            <li><button class="dropdown-item" onclick="getCacheInfoGlobal()">Current Global Usage: <span id="cache-size-global">Loading...</span></button></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><button class="dropdown-item text-danger" onclick="clearCache()">Clear localCache</button></li>
+            <li><button class="dropdown-item text-danger" onclick="clearCacheGlobal()">Clear Global Cache</button></li>
+        </ul>
+    </div>
 </div>
+
+<script>
+async function getCacheInfo() {
+    if (typeof AppState === 'undefined') return;
+    const response = await fetch(`${AppState.API_BASE}/api/cache_info`);
+    const data = await response.json();
+    const sizeInMB = (data.size / (1024 * 1024)).toFixed(2);
+    document.getElementById('cache-size').textContent = sizeInMB + ' MB';
+}
+async function getCacheInfoGlobal() {
+    if (typeof AppState === 'undefined') return;
+    const response = await fetch(`/api/cache_info`);
+    const data = await response.json();
+    const sizeInMB = (data.size / (1024 * 1024)).toFixed(2);
+    document.getElementById('cache-size-global').textContent = sizeInMB + ' MB';
+}
+
+async function clearCache() {
+    if (typeof AppState === 'undefined') return;
+    if (!confirm('Are you sure you want to clear the local cache?')) return;
+    const response = await fetch(`${AppState.API_BASE}/api/clear_cache`, { method: 'POST' });
+    if (response.ok) {
+        alert('Cache cleared.');
+        getCacheInfo();
+    }
+}
+
+async function clearCacheGlobal() {
+    if (typeof AppState === 'undefined') return;
+    if (!confirm('Are you sure you want to clear the Global cache? ')) return;
+    const response = await fetch(`/api/clear_cache`, { method: 'POST' });
+    if (response.ok) {
+        alert('Cache cleared.');
+        getCacheInfoGlobal();
+    }
+}
+window.addEventListener('load', getCacheInfo);
+window.addEventListener('load', getCacheInfoGlobal);
+</script>

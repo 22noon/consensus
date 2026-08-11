@@ -457,6 +457,27 @@ def extract_bam(browser=None):
         return jsonify({"success": True, "alleles": mock_alleles})
     return jsonify({"success": False}), 500
 
+@app.route("/api/cache_info")
+@app.route("/<path:browser>/api/cache_info")
+def cache_info(browser=None):
+    cache_dir = CACHE_ROOT if browser is None else CACHE_ROOT / browser
+    print("CACHE_INFO HIT:", browser, cache_dir, flush=True)
+    if not cache_dir.exists():
+        return jsonify({"size": 0})
+    
+    total_size = sum(f.stat().st_size for f in cache_dir.rglob('*') if f.is_file())
+    return jsonify({"size": total_size})
+
+@app.route("/api/clear_cache", methods=["POST"])
+@app.route("/<path:browser>/api/clear_cache", methods=["POST"])
+def clear_cache(browser=None):
+    cache_dir = CACHE_ROOT if browser is None else CACHE_ROOT / browser
+    print("CACHE_CLEAR HIT:", browser, cache_dir, flush=True)
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+    return jsonify({"success": True})
+
 
 
 # -----------------------------
