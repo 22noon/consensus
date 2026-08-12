@@ -13,45 +13,55 @@
             <li><hr class="dropdown-divider"></li>
             <li><button class="dropdown-item text-danger" onclick="clearCache()">Clear localCache</button></li>
             <li><button class="dropdown-item text-danger" onclick="clearCacheGlobal()">Clear Global Cache</button></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><button class="dropdown-item text-warning" onclick="clearLocalStorage()">Clear Local Storage</button></li>
         </ul>
-    </div>
-</div>
+        </div>
+        </div>
 
-<script>
-async function getCacheInfo() {
-    if (typeof AppState === 'undefined') return;
-    const response = await fetch(`${AppState.API_BASE}/api/cache_info`);
-    const data = await response.json();
-    const sizeInMB = (data.size / (1024 * 1024)).toFixed(2);
-    document.getElementById('cache-size').textContent = sizeInMB + ' MB';
-}
-async function getCacheInfoGlobal() {
-    if (typeof AppState === 'undefined') return;
-    const response = await fetch(`/api/cache_info`);
-    const data = await response.json();
-    const sizeInMB = (data.size / (1024 * 1024)).toFixed(2);
-    document.getElementById('cache-size-global').textContent = sizeInMB + ' MB';
-}
+        <script>
+        async function getCacheInfo() {
+        if (typeof AppState === 'undefined') return;
+        const response = await fetch(`${AppState.API_BASE}/api/cache_info`);
+        const data = await response.json();
+        const sizeInMB = (data.size / (1024 * 1024)).toFixed(2);
+        document.getElementById('cache-size').textContent = sizeInMB + ' MB';
+        }
+        async function getCacheInfoGlobal() {
+        if (typeof AppState === 'undefined') return;
+        const response = await fetch(`/api/cache_info`);
+        const data = await response.json();
+        const sizeInMB = (data.size / (1024 * 1024)).toFixed(2);
+        document.getElementById('cache-size-global').textContent = sizeInMB + ' MB';
+        }
 
-async function clearCache() {
-    if (typeof AppState === 'undefined') return;
-    if (!confirm('Are you sure you want to clear the local cache?')) return;
-    const response = await fetch(`${AppState.API_BASE}/api/clear_cache`, { method: 'POST' });
-    if (response.ok) {
+        async function clearCache() {
+        if (typeof AppState === 'undefined') return;
+        if (!confirm('Are you sure you want to clear the local cache?')) return;
+        const response = await fetch(`${AppState.API_BASE}/api/clear_cache`, { method: 'POST' });
+        if (response.ok) {
         alert('Cache cleared.');
         getCacheInfo();
-    }
-}
+        }
+        }
 
-async function clearCacheGlobal() {
-    if (typeof AppState === 'undefined') return;
-    if (!confirm('Are you sure you want to clear the Global cache? ')) return;
-    const response = await fetch(`/api/clear_cache`, { method: 'POST' });
-    if (response.ok) {
+        async function clearCacheGlobal() {
+        if (typeof AppState === 'undefined') return;
+        if (!confirm('Are you sure you want to clear the Global cache? ')) return;
+        const response = await fetch(`/api/clear_cache`, { method: 'POST' });
+        if (response.ok) {
         alert('Cache cleared.');
         getCacheInfoGlobal();
-    }
-}
-window.addEventListener('load', getCacheInfo);
-window.addEventListener('load', getCacheInfoGlobal);
-</script>
+        }
+        }
+
+        function clearLocalStorage() {
+        if (!confirm('Are you sure you want to clear local storage? This will reset all your saved filters and presets.')) return;
+        localStorage.clear();
+        alert('Local storage cleared. Page will reload.');
+        window.location.reload();
+        }
+
+        window.addEventListener('load', getCacheInfo);
+        window.addEventListener('load', getCacheInfoGlobal);
+        </script>
