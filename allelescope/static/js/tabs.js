@@ -76,8 +76,11 @@ function buildVariantTabs(data) {
 
     chroms.forEach((chrom, index) => {
         let variants = grouped[chrom];
-        if (variants[0]["pos"] === 0) variants = [];
 
+        if (variants[0]["pos"] === 0) {
+            // remove the placeholder first element with pos === 0
+            variants.shift();
+        }
         // Create tab button
         const li  = document.createElement("li");
         li.className = "nav-item";
@@ -121,7 +124,6 @@ function buildVariantTabs(data) {
         `;
 
         const tbody = table.querySelector("tbody");
-
         variants.forEach(v => {
             if (v.pos === 0) return;
 

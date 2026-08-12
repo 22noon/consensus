@@ -79,7 +79,6 @@ function createPresetToolbar(dataGetter, onLoad) {
         if (!name) return;
         alert(`Loading preset "${name}". This will overwrite your current view.`);
         console.log("Loading preset data:", presets[name].data);
-
         onLoad(presets[name].data);
     };
 
