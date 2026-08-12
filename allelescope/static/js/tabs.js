@@ -117,7 +117,7 @@ function buildVariantTabs(data) {
         table.innerHTML = `
             <thead class="table-light sticky-top">
                 <tr>
-                    <th>Pos</th><th>Ref</th><th>Alt</th><th>Info</th>
+                    <th>Pos</th><th>Ref</th><th>Alt</th><th>Info</th><th>Action</th>
                 </tr>
             </thead>
             <tbody></tbody>
@@ -137,7 +137,18 @@ function buildVariantTabs(data) {
                 <td class="text-muted small editable-info" contenteditable="true">
                     ${v.info || ""}
                 </td>
+                <td><button class="btn btn-sm btn-danger delete-btn">X</button></td>
             `;
+
+            row.querySelector(".delete-btn").addEventListener("click", (e) => {
+                e.stopPropagation();
+                if (confirm(`Delete variant at ${v.chrom}:${v.pos}?`)) {
+                    AppState.variants = AppState.variants.filter(varObj => 
+                        !(varObj.chrom === v.chrom && varObj.pos === v.pos)
+                    );
+                    buildVariantTabs(AppState.variants);
+                }
+            });
 
             row.addEventListener("click", () => {
                 document.querySelectorAll("tr.selected")
