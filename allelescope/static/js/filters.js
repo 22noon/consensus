@@ -192,7 +192,7 @@ function getFilterSettings() {
     filters.flagF = MapFlag(FILTER_STATE['retain-paired'], FILTER_STATE['retain-properpair'], FILTER_STATE['retain-secondary'], FILTER_STATE['retain-qcfail'], FILTER_STATE['retain-duplicates'], FILTER_STATE['retain-supplementary']);
     MapStrand(filters);
     filters.tagf        = MapTag(FILTER_STATE['filter-tag-overlap'], FILTER_STATE['filter-tag-nonspanningmate'], FILTER_STATE['filter-tag-splitx'], FILTER_STATE['filter-tag-split'], FILTER_STATE['filter-tag-proper'], FILTER_STATE['filter-tag-improper'], FILTER_STATE['filter-tag-f1r2'], FILTER_STATE['filter-tag-r1f2'], FILTER_STATE['filter-tag-f1f2'], FILTER_STATE['filter-tag-r1r2']);
-    filters.tagF        = MapTag(FILTER_STATE['retain-tag-overlap'], FILTER_STATE['retain-tag-nonspanningmate'], FILTER_STATE['retain-tag-splitx'], FILTER_STATE['retain-tag-split'], FILTER_STATE['retain-tag-proper'], FILTER_STATE['filter-tag-improper'], FILTER_STATE['retain-tag-f1r2'], FILTER_STATE['retain-tag-r1f2'], FILTER_STATE['retain-tag-f1f2'], FILTER_STATE['retain-tag-r1r2']);
+    filters.tagF        = MapTag(FILTER_STATE['retain-tag-overlap'], FILTER_STATE['retain-tag-nonspanningmate'], FILTER_STATE['retain-tag-splitx'], FILTER_STATE['retain-tag-split'], FILTER_STATE['retain-tag-proper'], FILTER_STATE['retain-tag-improper'], FILTER_STATE['retain-tag-f1r2'], FILTER_STATE['retain-tag-r1f2'], FILTER_STATE['retain-tag-f1f2'], FILTER_STATE['retain-tag-r1r2']);
     console.log("Current filter settings:", filters);
     return filters;
 }
