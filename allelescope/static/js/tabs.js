@@ -146,6 +146,7 @@ function buildVariantTabs(data) {
                     AppState.variants = AppState.variants.filter(varObj => 
                         !(varObj.chrom === v.chrom && varObj.pos === v.pos)
                     );
+                    localStorage.setItem("persistent_variants", JSON.stringify(AppState.variants));
                     buildVariantTabs(AppState.variants);
                 }
             });

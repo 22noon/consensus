@@ -79,6 +79,11 @@ function createPresetToolbar(dataGetter, onLoad) {
         if (!name) return;
         alert(`Loading preset "${name}". This will overwrite your current view.`);
         console.log("Loading preset data:", presets[name].data);
+
+        // Reset variant list tracker and update AppState
+        AppState.VariantList = {};
+        AppState.variants = presets[name].data;
+        localStorage.setItem("persistent_variants", JSON.stringify(AppState.variants));
         onLoad(presets[name].data);
     };
 
@@ -255,17 +260,22 @@ function initializeUIEventListeners() {
 
 /**
  * Initialization Sequence
- *
- * Note: The main initialization logic is now outside of the DOMContentLoaded event listener for clarity.
- * Need to ensure that this script is loaded after the DOM elements it interacts with are available, or use deferred initialization in html tag calling this routine    .
  */
 console.log("Initializing Interactive Variant Viewer...");
+
+// Load persistent variants if they exist
+const savedVariants = localStorage.getItem("persistent_variants");
+if (savedVariants) {
+    try {
+        AppState.variants = JSON.parse(savedVariants);
+        console.log("Loaded variants from localStorage");
+    } catch (e) {
+        console.warn("Failed to load saved variants:", e);
+    }
+}
+
 initFilterState();
-//loadFilters();         // optional persistence
-//restoreUI();           // update inputs
-//applyFilters();
 initFilterPresetControls();
-//populatePresetDropdown();
 buildVariantTabs(AppState.variants);
 bindEvents();
 initializeIGV();
