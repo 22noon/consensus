@@ -14,6 +14,7 @@
             <li><button class="dropdown-item text-danger" onclick="clearCache()">Clear localCache</button></li>
             <li><button class="dropdown-item text-danger" onclick="clearCacheGlobal()">Clear Global Cache</button></li>
             <li><hr class="dropdown-divider"></li>
+            <li><button class="dropdown-item text-warning" onclick="clearPersistentVariants()">Clear Persistent Variants</button></li>
             <li><button class="dropdown-item text-warning" onclick="clearLocalStorage()">Clear Local Storage</button></li>
         </ul>
         </div>
@@ -53,6 +54,13 @@
         alert('Cache cleared.');
         getCacheInfoGlobal();
         }
+        }
+
+        function clearPersistentVariants() {
+        if (!confirm('Are you sure you want to clear your persistent variants?')) return;
+        localStorage.removeItem('persistent_variants');
+        alert('Persistent variants cleared. Page will reload.');
+        window.location.reload();
         }
 
         function clearLocalStorage() {

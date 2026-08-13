@@ -343,11 +343,11 @@ function updateFilterSummary() {
     const container = document.getElementById("active-filters");
     if (!container) return;
 
-    const active = [];
+    container.innerHTML = "";
 
     Object.entries(FILTER_STATE).forEach(([key, value]) => {
 
-        if (!value || value === 0 || value === "both" || value === "0") return;
+        if (!value || value === 0 || value === "both" || value === "0" || key === "show-spanning") return;
 
         // Make label readable
         let label = key
@@ -355,14 +355,31 @@ function updateFilterSummary() {
             .replace("retain-", "require ")
             .replace(/-/g, " ");
 
-        active.push(label + ": " + value);
+        const badge = document.createElement("span");
+        badge.className = "badge bg-primary me-1 d-inline-flex align-items-center";
+        badge.innerHTML = `${label}: ${value} <span class="ms-1" style="cursor:pointer" onclick="removeFilter('${key}')">&times;</span>`;
+        container.appendChild(badge);
     });
+}
 
-    if (active.length === 0) {
-        container.textContent = "None";
+function removeFilter(key) {
+    // Reset state
+    if (typeof FILTER_STATE[key] === "boolean") {
+        FILTER_STATE[key] = false;
     } else {
-        container.innerHTML = active
-            .map(f => `<span class="badge bg-primary me-1">${f}</span>`)
-            .join("");
+        FILTER_STATE[key] = 0;
     }
+
+    // Reset UI element
+    const el = document.querySelector(`[data-filter-id="${key}"]`);
+    if (el) {
+        if (el.type === "checkbox") {
+            el.checked = false;
+        } else {
+            el.value = 0;
+        }
+    }
+
+    // Apply
+    applyFilters();
 }
