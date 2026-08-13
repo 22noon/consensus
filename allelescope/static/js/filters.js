@@ -345,10 +345,23 @@ function updateFilterSummary() {
 
     container.innerHTML = "";
 
-    Object.entries(FILTER_STATE).forEach(([key, value]) => {
+    const activeKeys = Object.entries(FILTER_STATE).filter(([key, value]) => {
+        return value && value !== 0 && value !== "both" && value !== "0" && key !== "show-spanning";
+    });
 
-        if (!value || value === 0 || value === "both" || value === "0" || key === "show-spanning") return;
+    if (activeKeys.length === 0) {
+        container.textContent = "None";
+        return;
+    }
 
+    // Add clear all button
+    const clearAllBtn = document.createElement("button");
+    clearAllBtn.className = "btn btn-sm btn-outline-danger me-2";
+    clearAllBtn.textContent = "Clear All";
+    clearAllBtn.onclick = resetFilters;
+    container.appendChild(clearAllBtn);
+
+    activeKeys.forEach(([key, value]) => {
         // Make label readable
         let label = key
             .replace("filter-", "")
