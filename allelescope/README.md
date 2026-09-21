@@ -51,7 +51,7 @@ bcftools norm -f reference.fa -m -any raw_calls.vcf.gz \
 bcftools index -t calls.norm.vcf.gz
 ```
 
-Pass the resulting `calls.norm.vcf.gz` to the build script with `-v`.
+This will create the normalized variant file `calls.norm.vcf.gz`. This can be passed in the step below to the build script with `-v` option. (This vcf preparation was tested with bcftools version 1.19.)
 
 ---
 
@@ -104,6 +104,13 @@ conda activate allelescope
 micromamba create -n allelescope -c conda-forge -c bioconda samtools=1.19.2 htslib=1.19 
 micromamba activate allelescope
 ```
+
+if you want a compatible 'bcftools' installed in the same environment run:
+
+```bash
+conda install bcftools=1.19
+```
+or the equivalent command for the environment.
 
 If you already have a suitable active environment, you can also install directly:
 
