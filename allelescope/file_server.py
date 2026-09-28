@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import io
 
 from flask import Flask, send_from_directory, Response, request, jsonify,send_file, redirect 
@@ -8,11 +9,13 @@ import urllib.parse
 import pysam
 import mimetypes
 import os
-import argparse
+import pysam
 import sys
 import re
 import hashlib
+import json
 from pathlib import Path
+
 from .process_variant import process_variant
 import shutil
 
@@ -477,6 +480,18 @@ def clear_cache(browser=None):
         shutil.rmtree(cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
     return jsonify({"success": True})
+
+@app.route("/api/load_default_presets")
+def load_default_presets():
+    preset_path = DATA_DIR / "filters" / "filters.json"
+    if not preset_path.exists():
+        return jsonify({"error": "Presets file not found"}), 404
+    
+    try:
+        with open(preset_path, "r") as f:
+            return jsonify(json.load(f))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 

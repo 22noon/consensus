@@ -138,3 +138,6 @@ proper pairs).  Select suspicious or supporting reads with Shift-click,
 compare them using **Retain** or **Filter**, and export the final selection if
 needed.  Reset filters before moving on when you want to return to the full
 read set.
+
+## TODO
+reads are colored by strand

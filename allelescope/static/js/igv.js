@@ -274,6 +274,19 @@ if (savedVariants) {
     }
 }
 
+// Load default presets from /filters/filters.json
+fetch(`${AppState.API_BASE}/api/load_default_presets`)
+    .then(response => response.json())
+    .then(data => {
+        if (!data.error) {
+            const existingPresets = JSON.parse(localStorage.getItem("variantPresets") || "{}");
+            const updatedPresets = { ...existingPresets, ...data };
+            localStorage.setItem("variantPresets", JSON.stringify(updatedPresets));
+            console.log("Loaded default presets from /filters/filters.json");
+        }
+    })
+    .catch(err => console.warn("Could not load default presets:", err));
+
 initFilterState();
 initFilterPresetControls();
 buildVariantTabs(AppState.variants);

@@ -16,10 +16,11 @@
             <li><hr class="dropdown-divider"></li>
             <li><button class="dropdown-item text-warning" onclick="clearPersistentVariants()">Clear Persistent Variants</button></li>
             <li><button class="dropdown-item text-warning" onclick="clearLocalStorage()">Clear Local Storage</button></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><button class="dropdown-item" onclick="exportFilterSettings()">Export Filter Settings</button></li>
         </ul>
         </div>
         </div>
-
         <script>
         async function getCacheInfo() {
         if (typeof AppState === 'undefined') return;
