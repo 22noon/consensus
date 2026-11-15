@@ -13,10 +13,11 @@ instances:
 start_server --data-dir /path/to/Browsers --port 8000
 ```
 
-Open the instance's `interactive_variants.html` page in a browser.  For an
-instance in `/path/to/Browsers/sample-01`, the address is:
+Open the instance in a browser.  For an instance in
+`/path/to/Browsers/sample-01`, either of these addresses works:
 
 ```
+http://localhost:8000/sample-01/
 http://localhost:8000/sample-01/interactive_variants.html
 ```
 
@@ -66,42 +67,78 @@ The filter groups are:
 
 | Group | Use it to |
 | --- | --- |
-| **Filter by Value** | Limit reads by soft-clip length or edit distance. |
+| **Filter by Value** | Limit reads by soft-clip length, edit distance, or mapping quality. |
+| **BAQ Filters** | Limit reads by their base alignment quality at the selected site. |
 | **Include (Require)** | Keep reads that have selected SAM flags or `XO` tag bits. |
 | **Exclude (Forbid)** | Remove reads that have selected SAM flags or `XO` tag bits. |
-| **Strand** | Keep reads from both strands, the plus strand, or the minus strand. |
+| **Strand** | Keep reads from both strands, the plus (forward) strand, or the minus (reverse) strand. |
 
 For the flag and `XO` tag checkboxes, **Include** and **Exclude** are mutually
 exclusive for the same property: selecting one clears the opposite setting.
 Use Include when that property must be present; use Exclude when it must be
 absent.  The `XO` choices (`overlap`, `mates`, `split mates`, `split reads`,
 `proper`, and `improper`) apply to Allelescope's `XO` read tag, when present.
+`proper` means the aligner flagged the pair as proper and the mates face each
+other, whichever of read 1 and read 2 is on the forward strand (`F1R2` or
+`R1F2`); every other paired read is `improper`.
 
-Soft-clip filtering uses the inclusive minimum field to retain reads with at
-least that many clipped bases and the maximum field to retain reads with no
-more than that many.  Edit Distance currently acts as an upper limit despite
-the UI's `Min` label: a non-zero value retains reads whose `NM` edit-distance
-tag is at most that value.
+### Numeric limits
 
-> **Current limitation:** the visible **Mapping Quality** and **BAQ value**
-> fields are not applied by the current server filtering code.  Do not rely on
-> them to change the displayed reads.
+The numeric boxes are empty by default, and an empty box means no limit, so
+nothing is filtered until you type a value.  A value is applied as typed,
+including 0: a maximum edit distance of 0 keeps only reads that match the
+reference exactly.
+
+| Box | Keeps reads with |
+| --- | --- |
+| **Soft Clip Length** Min / Max | at least / at most that many soft-clipped bases (both ends added together) |
+| **Edit Distance** Min / Max | an `NM` edit distance of at least / at most that value |
+| **Mapping Quality** Min | a mapping quality of at least that value |
+| **BAQ value** Min / Max | a base alignment quality at the selected site of at least / at most that value |
+
+BAQ is read from the `BQ` tag that `samtools calmd -r` adds while a site is
+prepared.  It is evaluated on the reads that cover the site, and a read pair is
+kept or removed as a whole, so mates follow the read that covers the site.  For
+a read with a deletion at the site, the median of the neighbouring bases is
+used.
+
+The **Soft clips** tick boxes are separate from the Soft Clip Length boxes:
+under Include the read must have at least one soft-clipped base, under Exclude
+it must have none.
+
+### Active Filters
+
+Each badge states the condition that is applied.  `require ...` means only
+reads with that property are shown (Include ticks and minimums, for example
+`require MAPQ ≥ 20`); `exclude ...` means reads with that property are hidden
+(Exclude ticks and maximums, for example `exclude duplicates` or
+`exclude soft clip > 5`).  Click the × on a badge to remove that filter.
 
 ## Filter by observed allele at a site
 
-When you add a manual position, Allelescope extracts the observed alleles and
-shows an **Alleles at _chromosome:position_** panel.  Each row reports an allele
-type (for example `REF`, `SNP`, `DEL`, or `INS`), its supporting read count, and
-its percentage of the extracted reads.
+When you select a variant row or add a manual position, Allelescope extracts
+the observed alleles and shows an **Alleles at _chromosome:position_** panel
+below the variant list.  Each row reports an allele type (for example `REF`,
+`SNP`, `DEL`, or `INS`), its supporting read-pair count, and its percentage.
+For a variant from the VCF, the row that matches the record's ALT allele is
+marked `ALT`.
+
+A VCF records an insertion or deletion at the base before the change, where
+every read still shows the reference.  For those records Allelescope compares
+the reads one base further on (the first deleted base, or the base after the
+insertion point) and says so in the panel; the view stays centred on the VCF
+position.
 
 1. Choose which allele rows are visible: **All**, the **Top** _N_, or those at
    least a chosen percentage.
 2. Tick the alleles of interest, or use **All**/**None** to set the checkboxes.
 3. Select **Filter** to retain reads associated with the selected allele(s).
 
-This allele filter is combined with the other active filters.  If no allele is
-selected, the viewer leaves the current read set unchanged and reports that
-nothing was selected.
+This allele filter is combined with the other active filters and is listed
+under **Active Filters** (for example `require allele DEL 7`).  It belongs to
+the site it was set at: selecting another site clears it.  To clear it
+yourself, remove its badge, use **Reset filters**, or choose **Filter** with no
+allele ticked.
 
 ## Select, compare, and export reads
 
@@ -118,6 +155,10 @@ For selected reads:
 | **Filter** | Removes the selected reads from the spanning-read track. |
 | **Export** | Downloads the selected reads after the active filters are applied. |
 | **Clear List** | Clears the selection and restores the unselected read set. |
+
+**Retain** and **Filter** apply to the site you are viewing.  When you select
+another site the full read set is shown again; the selection is kept, so you
+can apply it there too.
 
 > **Current limitation:** the **Clear Highlights** button is displayed, but its
 > action is not implemented in the current viewer.  Use **Clear List** when you
