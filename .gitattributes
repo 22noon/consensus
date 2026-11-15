@@ -1,0 +1,12 @@
+# Files that run inside the Linux container must keep LF line endings, even
+# when the repository is checked out on Windows (core.autocrlf=true would
+# otherwise turn them into CRLF and break the image build or the entrypoint).
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+.dockerignore text eol=lf
+
+# Demo data and indexes are binary.
+*.bam  binary
+*.bai  binary
+*.gz   binary
+*.tbi  binary
