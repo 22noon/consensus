@@ -38,6 +38,14 @@ async function selectVariantRow(row, variant, knownAlleles) {
         showFilterMessage("Allele filter cleared: it applied to the previous site");
     }
 
+    // Retain / Filter of selected reads is stored per site on the server;
+    // carrying its token to another site asks for a file that does not exist.
+    // The selection itself is kept, so it can be applied again here.
+    if (AppState.Token && `${AppState.Current.Chrom}:${AppState.Current.Pos}` !== siteKey(site)) {
+        AppState.Token = "";
+        showFilterMessage("Retain/Filter of selected reads was reset for the new site");
+    }
+
     // The first request for a site makes the server extract its reads. Wait
     // for it before loading the track so the site is only processed once.
     const seq = ++variantSelectionSeq;
