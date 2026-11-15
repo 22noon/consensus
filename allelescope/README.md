@@ -64,6 +64,7 @@ This will create the normalized variant file `calls.norm.vcf.gz`. This can be pa
 
 ```
 build_variant_browser -b BAM -r FASTA [-v VCF] [-g GENOME_NAME] [-o OUT_DIR] [-t THREADS]
+                      [--bam-processing auto|full|skip] [--link]
 ```
 The detailed description of flags are shown below.
 
@@ -75,6 +76,8 @@ The detailed description of flags are shown below.
 | `-g` | No | auto-inferred | Genome name passed to `generate_viewer.py` |
 | `-o` | No | `./out_dir` | Output directory (created if it does not exist) |
 | `-t` | No | `10` | Number of threads for samtools |
+| `--bam-processing` | No | `auto` | `auto`: run only the BAM processing steps the file still needs (see below); `full`: always run every step; `skip`: use a coordinate-sorted BAM as it is |
+| `--link` | No | off | When the BAM needs no processing, hard-link it into the output directory instead of copying it. Only works on the same file system; otherwise the BAM is copied |
 | `-h` | — | — | Print help and exit |
 
 
@@ -158,7 +161,16 @@ build_variant_browser.sh \
 
 1. **Validates** that all supplied input files exist and required tools are available.
 2. **Resolves the genome name** from the VCF or BAM header if not provided.
-3. **Processes the BAM** through a `collate → fixmate → sort → markdup` pipeline and writes `alignment.markdup.bam` to the output directory.
+3. **Processes the BAM** and writes `alignment.markdup.bam` to the output directory. A raw BAM goes through a `collate → fixmate → sort → markdup` pipeline. With `--bam-processing auto` (the default), the script first reads the BAM header and the first 20,000 records, and skips the steps that have already been done:
+
+   | The BAM | Steps run |
+   |---|---|
+   | is coordinate-sorted and an `@PG` header line shows a duplicate-marking program (samtools markdup, Picard or GATK MarkDuplicates, sambamba, biobambam, samblaster) | none: the BAM is copied (or hard-linked with `--link`) and its index is reused if it is up to date |
+   | has duplicates marked but is not coordinate-sorted | `sort` |
+   | is coordinate-sorted and every sampled pair has the `MC` and `ms` tags that `samtools fixmate -m` adds | `markdup` |
+   | anything else, including single-end BAMs without duplicate marking | `collate → fixmate → sort → markdup` |
+
+   `collate` leaves no trace of its own: it only groups reads by name so that `fixmate` can see both mates, so it is run only together with `fixmate`. Duplicate flags without a recognised program in the header are not trusted, because they may come from an earlier, unrelated run; use `--bam-processing skip` to keep them. Duplicates marked by another tool are kept as that tool marked them.
 4. **Indexes the BAM** (`.bai`).
 5. **Copies the reference FASTA** to the output directory and indexes it with `samtools faidx` (`.fai`).
 6. **Copies and indexes the VCF** (if provided). If the file is not bgzipped, it is bgzipped automatically before indexing with `tabix` (`.tbi`).

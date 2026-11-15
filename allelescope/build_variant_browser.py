@@ -8,11 +8,19 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Iterable, Optional
+
+try:  # run as part of the package
+    from .bam_state import (PLAN_COPY, PLAN_FULL, PLAN_MARKDUP, PLAN_SORT,
+                            existing_index, inspect_bam)
+except ImportError:  # run as a script
+    from bam_state import (PLAN_COPY, PLAN_FULL, PLAN_MARKDUP, PLAN_SORT,
+                           existing_index, inspect_bam)
 
 
 class BuildError(RuntimeError):
@@ -117,8 +125,81 @@ def resolve_genome_name(genome_name: str, variants: Optional[Path], bam: Path) -
     return inferred
 
 
-def process_bam(bam: Path, out_dir: Path, threads: int) -> Path:
+PLAN_LABELS = {
+    PLAN_FULL:    "collate → fixmate → sort → markdup",
+    PLAN_MARKDUP: "markdup only",
+    PLAN_SORT:    "sort only",
+    PLAN_COPY:    "no processing: copy and index",
+}
+
+
+def choose_bam_plan(bam: Path, mode: str) -> str:
+    """Decide which preprocessing steps to run (see bam_state.py)."""
+    step("Checking which BAM processing steps are needed")
+    if mode == "full":
+        info("--bam-processing full: running every step")
+        return PLAN_FULL
+
+    state = inspect_bam(bam)
+    for line in state.describe():
+        info(line)
+
+    if mode == "skip":
+        if not state.is_sorted:
+            raise BuildError("--bam-processing skip needs a coordinate-sorted BAM; "
+                             "use --bam-processing auto or full")
+        if not state.duplicates_marked:
+            warn("No duplicate-marking program found in the BAM header; "
+                 "the 'Duplicates' filters will find nothing to act on")
+        return PLAN_COPY
+
+    plan = state.plan()
+    info(f"Plan: {PLAN_LABELS[plan]}")
+    return plan
+
+
+def place_bam(bam: Path, dest: Path, link: bool) -> None:
+    """Copy the BAM into the instance, or hard-link it when asked and possible."""
+    if dest.exists() or dest.is_symlink():
+        dest.unlink()
+    if link:
+        try:
+            os.link(bam, dest)
+            info(f"Hard-linked {bam.name} into the instance (no copy)")
+            return
+        except OSError as exc:
+            warn(f"Could not hard-link ({exc}); copying instead")
+    info(f"Copying {bam.name} into the instance")
+    shutil.copyfile(bam, dest)
+
+
+def process_bam(bam: Path, out_dir: Path, threads: int, mode: str = "auto", link: bool = False) -> Path:
     markdup_bam = out_dir / "alignment.markdup.bam"
+    plan = choose_bam_plan(bam, mode)
+
+    if plan == PLAN_COPY:
+        step("Using the BAM as it is")
+        place_bam(bam, markdup_bam, link)
+        index = existing_index(bam)
+        if index is not None:
+            dest_index = Path(str(markdup_bam) + index.suffix)
+            shutil.copyfile(index, dest_index)
+            success(f"Existing index reused: {dest_index.name}")
+        else:
+            step("Indexing BAM")
+            run(["samtools", "index", "-@", str(threads), str(markdup_bam)])
+            success(f"BAM index written: {markdup_bam}.bai")
+        return markdup_bam
+
+    if plan == PLAN_SORT:
+        step("Sorting BAM (duplicates already marked)")
+        run(["samtools", "sort", "-@", str(threads), "-o", str(markdup_bam), str(bam)])
+        return _index(markdup_bam, threads)
+
+    if plan == PLAN_MARKDUP:
+        step("Marking duplicates (BAM already sorted, fixmate tags present)")
+        run(["samtools", "markdup", "-@", str(threads), str(bam), str(markdup_bam)])
+        return _index(markdup_bam, threads)
     tmp_prefix = out_dir / "tmp_markdup"
 
     step("Processing BAM (collate → fixmate → sort → markdup)")
@@ -159,11 +240,14 @@ def process_bam(bam: Path, out_dir: Path, threads: int) -> Path:
         raise BuildError(f"BAM processing pipeline failed; exit codes: {exit_codes}")
 
     success(f"markdup BAM written: {markdup_bam}")
+    return _index(markdup_bam, threads)
 
+
+def _index(bam: Path, threads: int) -> Path:
     step("Indexing BAM")
-    run(["samtools", "index", str(markdup_bam)])
-    success(f"BAM index written: {markdup_bam}.bai")
-    return markdup_bam
+    run(["samtools", "index", "-@", str(threads), str(bam)])
+    success(f"BAM index written: {bam}.bai")
+    return bam
 
 
 def copy_and_index_reference(ref: Path, out_dir: Path) -> Path:
@@ -254,7 +338,7 @@ def build_variant_browser(args: argparse.Namespace) -> None:
     step(f"Preparing output directory: {out_dir}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    markdup_bam = process_bam(bam, out_dir, args.threads)
+    markdup_bam = process_bam(bam, out_dir, args.threads, args.bam_processing, args.link)
     ref_dest = copy_and_index_reference(ref, out_dir)
     vcf_dest = copy_and_index_vcf(variants, out_dir)
     run_viewer_generator(genome_name, ref_dest, markdup_bam, vcf_dest, out_dir)
@@ -279,6 +363,17 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("-g", "--genome-name", default="", help="Genome name; default: first VCF contig, then first BAM reference")
     parser.add_argument("-o", "--out-dir", default="./out_dir", help="Output directory; default: ./out_dir")
     parser.add_argument("-t", "--threads", type=int, default=10, help="Threads for samtools; default: 10")
+    parser.add_argument(
+        "--bam-processing", choices=["auto", "full", "skip"], default="auto",
+        help="auto (default): check the BAM and run only the steps it still needs; "
+             "full: always run collate, fixmate, sort and markdup; "
+             "skip: use a coordinate-sorted BAM as it is",
+    )
+    parser.add_argument(
+        "--link", action="store_true",
+        help="When the BAM needs no processing, hard-link it into the instance "
+             "instead of copying it (same file system only; falls back to a copy)",
+    )
     return parser
 
 
