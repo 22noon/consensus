@@ -16,6 +16,11 @@
 
     <div class="accordion-body">
 
+      <p class="small text-muted mb-2">
+        Base alignment quality of each read at the selected site.
+        Leave a box empty for no limit.
+      </p>
+
       <h6 class="mb-2">BAQ value</h6>
 
       <div class="row g-2 mb-3">
@@ -25,7 +30,7 @@
                  id="min-baq"
                  data-filter-id="min-baq"
                  class="form-control form-control-sm"
-                 value="0" min="0" max="60">
+                 value="" placeholder="any" min="0">
         </div>
 
         <div class="col">
@@ -34,7 +39,7 @@
                  id="max-baq"
                  data-filter-id="max-baq"
                  class="form-control form-control-sm"
-                 value="0" min="0" max="60">
+                 value="" placeholder="any" min="0">
         </div>
       </div>
 

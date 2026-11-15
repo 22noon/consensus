@@ -17,6 +17,10 @@
         <div class="accordion-body">
             <div class="card-subtle">
 
+                <p class="small text-muted mb-2">
+                    Leave a box empty for no limit. A number is applied as typed, including 0.
+                </p>
+
                 <!-- Soft Clip -->
                 <h6 class="mb-2">Soft Clip Length</h6>
                 <div class="row g-2 mb-3">
@@ -26,7 +30,7 @@
                                id="filter-min-soft-clip"
                                data-filter-id="filter-min-soft-clip"
                                class="form-control form-control-sm"
-                               value="0" min="0" max="60">
+                               value="" placeholder="any" min="0">
                     </div>
 
                     <div class="col">
@@ -35,20 +39,20 @@
                                id="retain-min-soft-clip"
                                data-filter-id="retain-min-soft-clip"
                                class="form-control form-control-sm"
-                               value="0" min="0" max="60">
+                               value="" placeholder="any" min="0">
                     </div>
                 </div>
 
                 <!-- Edit Distance -->
                 <h6 class="mb-2">Edit Distance</h6>
-                <div class="row g-2">
+                <div class="row g-2 mb-3">
                     <div class="col">
                         <label class="form-label small">Min</label>
                         <input type="number"
                                id="filter-min-edit-distance"
                                data-filter-id="filter-min-edit-distance"
                                class="form-control form-control-sm"
-                               value="0" min="0" max="60">
+                               value="" placeholder="any" min="0">
                     </div>
 
                     <div class="col">
@@ -57,7 +61,7 @@
                                id="retain-max-edit-distance"
                                data-filter-id="retain-max-edit-distance"
                                class="form-control form-control-sm"
-                               value="0" min="0" max="60">
+                               value="" placeholder="any" min="0">
                     </div>
                 </div>
 
@@ -65,12 +69,12 @@
                 <h6 class="mb-2">Mapping Quality</h6>
                 <div class="row g-2">
                     <div class="col">
-                        <label class="form-label small">Max</label>
+                        <label class="form-label small">Min</label>
                         <input type="number"
                                id="min-mapq"
                                data-filter-id="min-mapq"
                                class="form-control form-control-sm"
-                               value="0" min="0" max="60">
+                               value="" placeholder="any" min="0">
                     </div>
                 </div>
 
