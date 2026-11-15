@@ -518,12 +518,16 @@ def load_default_presets():
 
 @app.route("/")
 @app.route("/<path:browser>")
-@app.route("/<path:browser>/")
 def index(browser=None):
+    # A single catch-all rule: registering "/<path:browser>/" as well makes
+    # Werkzeug redirect every file URL (e.g. ".../interactive_variants.html")
+    # to a trailing-slash version, which breaks the page's relative URLs.
     serverpath = DATA_DIR if browser is None else DATA_DIR / browser
 
     if serverpath.is_dir():
         if browser is not None and not request.path.endswith("/"):
+            # Directory URLs need the trailing slash so that config.js and the
+            # /api/... calls resolve relative to the instance.
             print("redirecting: ", DATA_DIR, request.path, flush=True)
             return redirect(request.path + "/", code=308)
 
