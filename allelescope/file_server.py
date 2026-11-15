@@ -387,14 +387,20 @@ def extract_bam(browser=None):
                 count = int(count)
                 pct = round(float(pct)*100, 2)
 
-                mock_alleles.append({
+                allele = {
                     "xa": xa,
                     "xd": 0,
                     "xn": 0,
                     "count": count,
                     "pct": pct,
                     "type": allele_type,
-                })
+                }
+                if len(fields) >= 8:
+                    allele["fwd"] = int(fields[4])
+                    allele["rev"] = int(fields[5])
+                    allele["bq"] = float(fields[6]) if fields[6] else None
+                    allele["mq"] = float(fields[7]) if fields[7] else None
+                mock_alleles.append(allele)
 
         return jsonify({"success": True, "alleles": mock_alleles,
                         "sampling": read_site_info(serverpath, Chrom, Pos, Sample)})

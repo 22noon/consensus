@@ -339,3 +339,10 @@ table {
 .chrom-layout[data-mode="dropdown"] #chromTabContent {
     margin-top: 0.5rem !important;
 }
+
+/* Allele panel rows (alleleFilter.js) */
+.allele-row { cursor: pointer; }
+.allele-row:hover { background: #f1f5f9; }
+.allele-row-active { background: #dbeafe; }
+.allele-row-hidden { display: none !important; }
+.allele-stats { padding-left: 1.75rem; font-size: 0.75rem; }

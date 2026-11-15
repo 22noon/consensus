@@ -11,7 +11,7 @@ import pysam
 #   2: XO "proper" covers both F1R2 and R1F2 proper pairs
 #   3: XA reference/mismatch decided against the FASTA rather than MD tags;
 #      BQ (BAQ) only on reads that cross the site
-PROCESSING_VERSION = "3"
+PROCESSING_VERSION = "4"
 _VERSION_FILE = ".allelescope_version"
 _checked_dirs = set()
 _check_lock = threading.Lock()
@@ -152,6 +152,7 @@ def process_variant(
         return 0
 
     sample_info = {}
+    allele_stats = {}
     allele_counts = extract_mates(
         src_bam   = src_bam,
         out_bam   = str(out_bam),
@@ -162,8 +163,9 @@ def process_variant(
         ref_fasta = str(Ref),
         max_pairs = sample,
         sample_info = sample_info,
+        allele_stats = allele_stats,
     )
-    _write_indel_stats(allele_counts, str(out_bam))
+    _write_indel_stats(allele_counts, str(out_bam), allele_stats)
     sample_info["sample"] = sample
     site_info_path(base, Chrom, Pos, sample).write_text(json.dumps(sample_info), encoding="utf-8")
     pysam.index(str(out_bam))
