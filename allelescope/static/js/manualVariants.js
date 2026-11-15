@@ -37,7 +37,7 @@ function addManualVariantRow() {
 
         const v = { chrom, pos, ref: "-", alt: "-", info: "Manual" };
         AppState.variants.push(v);
-        localStorage.setItem("persistent_variants", JSON.stringify(AppState.variants));
+        recordVariantAdded(v);
 
         const row = document.createElement("tr");
         row.classList.add("manual-row");
@@ -102,5 +102,5 @@ function clearManualVariants() {
     
     // Remove manual variants from AppState.variants and persist
     AppState.variants = AppState.variants.filter(v => v.chrom !== chrom || v.info !== "Manual");
-    localStorage.setItem("persistent_variants", JSON.stringify(AppState.variants));
+    recordManualVariantsCleared(chrom);
 }

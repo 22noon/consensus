@@ -55,6 +55,21 @@ Choose **Clear** to remove the manually added rows from the current chromosome.
 Manual positions are useful for checking a suspected site that has not been
 called.  They are not written back to the VCF.
 
+### What is remembered
+
+Your browser remembers the changes you make to the variant list: the positions
+you add and the rows you remove with **X**.  It does not store the list itself.
+Each instance applies those changes to its own VCF variants, so on one server:
+
+* a position added by hand appears in every instance that has that sequence;
+* a removed row is hidden in every instance that has a variant at that
+  sequence and position;
+* each instance otherwise keeps showing its own calls.
+
+**Clear Persistent Variants** in the header menu forgets all of these changes.
+Loading a saved variant list (Variants gear menu) replaces them with the
+difference between that list and the instance's own variants.
+
 ## Read filtering
 
 Changing a filter reloads the spanning-read track around the active variant.

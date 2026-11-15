@@ -2,6 +2,133 @@
  * Variant Tab Functions
  */
 
+/*
+ * Remembered edits to the variant list.
+ *
+ * The browser remembers what the user changed - positions added by hand and
+ * rows removed - not the list itself. Each instance applies those edits to
+ * its own VCF variants, so the edits are shared between instances on one
+ * server while every instance keeps showing its own calls.
+ *
+ * Stored under "persistent_variants" as
+ *   { version: 2, added: [variant, ...], removed: [{chrom, pos}, ...] }
+ * Older versions stored the whole displayed list (an array) under the same
+ * key, which made one instance's VCF variants replace another's. Only the
+ * manually added positions can be recovered from that format.
+ */
+const VARIANT_EDITS_KEY = "persistent_variants";
+
+function variantKey(v) {
+    return `${v.chrom}:${v.pos}`;
+}
+
+function emptyVariantEdits() {
+    return { version: 2, added: [], removed: [] };
+}
+
+function loadVariantEdits() {
+    let stored;
+    try {
+        stored = JSON.parse(localStorage.getItem(VARIANT_EDITS_KEY) || "null");
+    } catch (e) {
+        console.warn("Failed to read saved variant edits:", e);
+        return emptyVariantEdits();
+    }
+    if (!stored) return emptyVariantEdits();
+
+    if (Array.isArray(stored)) {
+        // Legacy whole-list format: keep the manual positions, drop the rest.
+        const edits = emptyVariantEdits();
+        edits.added = stored.filter(v => v && v.info === "Manual" && v.pos > 0);
+        saveVariantEdits(edits);
+        console.log(`Converted a saved variant list to ${edits.added.length} manual position(s)`);
+        return edits;
+    }
+
+    return {
+        version: 2,
+        added:   Array.isArray(stored.added)   ? stored.added.filter(v => v && v.chrom && v.pos > 0)   : [],
+        removed: Array.isArray(stored.removed) ? stored.removed.filter(v => v && v.chrom && v.pos > 0) : [],
+    };
+}
+
+function saveVariantEdits(edits) {
+    try {
+        if (edits.added.length === 0 && edits.removed.length === 0) {
+            localStorage.removeItem(VARIANT_EDITS_KEY);
+        } else {
+            localStorage.setItem(VARIANT_EDITS_KEY, JSON.stringify(edits));
+        }
+    } catch (e) {
+        console.warn("Failed to save variant edits:", e);
+    }
+}
+
+/* This instance's variant list: its own variants minus the removed rows,
+ * plus the added positions that lie on one of its sequences. */
+function applyVariantEdits(base, edits) {
+    const removed    = new Set(edits.removed.map(variantKey));
+    const chromOrder = new Map();
+    base.forEach(v => { if (!chromOrder.has(v.chrom)) chromOrder.set(v.chrom, chromOrder.size); });
+
+    const kept    = base.filter(v => v.pos === 0 || !removed.has(variantKey(v)));
+    const present = new Set(kept.map(variantKey));
+    const extra   = [];
+    edits.added.forEach(v => {
+        if (!chromOrder.has(v.chrom) || present.has(variantKey(v))) return;
+        present.add(variantKey(v));
+        extra.push({ ...v });
+    });
+
+    return [...kept, ...extra].sort((a, b) =>
+        (chromOrder.get(a.chrom) - chromOrder.get(b.chrom)) || (a.pos - b.pos)
+    );
+}
+
+function recordVariantAdded(v) {
+    const edits = AppState.variantEdits;
+    if (!edits.added.some(a => variantKey(a) === variantKey(v))) {
+        edits.added.push({ chrom: v.chrom, pos: v.pos, ref: v.ref, alt: v.alt, info: v.info });
+    }
+    saveVariantEdits(edits);
+}
+
+function recordVariantRemoved(v) {
+    const edits = AppState.variantEdits;
+    const key   = variantKey(v);
+    if (edits.added.some(a => variantKey(a) === key)) {
+        // Removing a position that was added by hand just undoes the addition.
+        edits.added = edits.added.filter(a => variantKey(a) !== key);
+    } else if (!edits.removed.some(r => variantKey(r) === key)) {
+        edits.removed.push({ chrom: v.chrom, pos: v.pos });
+    }
+    saveVariantEdits(edits);
+}
+
+function recordManualVariantsCleared(chrom) {
+    const edits = AppState.variantEdits;
+    edits.added = edits.added.filter(a => !(a.chrom === chrom && a.info === "Manual"));
+    saveVariantEdits(edits);
+}
+
+/* Loading a saved variant list replaces the current edits with the
+ * difference between that list and this instance's own variants. */
+function recordVariantListLoaded(list) {
+    const baseKeys = new Set(VARIANTS_DATA.filter(v => v.pos !== 0).map(variantKey));
+    const listKeys = new Set(list.filter(v => v.pos !== 0).map(variantKey));
+    const edits    = emptyVariantEdits();
+
+    edits.removed = VARIANTS_DATA
+        .filter(v => v.pos !== 0 && !listKeys.has(variantKey(v)))
+        .map(v => ({ chrom: v.chrom, pos: v.pos }));
+    edits.added = list
+        .filter(v => v.pos !== 0 && !baseKeys.has(variantKey(v)))
+        .map(v => ({ chrom: v.chrom, pos: v.pos, ref: v.ref, alt: v.alt, info: v.info }));
+
+    AppState.variantEdits = edits;
+    saveVariantEdits(edits);
+}
+
 function toggleEmptyTabs(showEmpty) {
     const tabsContainer = document.getElementById("chromTabs");
     if (!tabsContainer) return;
@@ -146,7 +273,7 @@ function buildVariantTabs(data) {
                     AppState.variants = AppState.variants.filter(varObj => 
                         !(varObj.chrom === v.chrom && varObj.pos === v.pos)
                     );
-                    localStorage.setItem("persistent_variants", JSON.stringify(AppState.variants));
+                    recordVariantRemoved(v);
                     buildVariantTabs(AppState.variants);
                 }
             });
