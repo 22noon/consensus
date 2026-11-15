@@ -519,7 +519,7 @@ def _write_indel_stats(allele_counts: defaultdict, out_bam: str) -> None:
     """Write indel statistics file alongside the output BAM."""
     indelstat_output = f"{out_bam}.indelstats.txt"
     total = sum(allele_counts.values())
-    with open(indelstat_output, 'w') as f:
+    with open(indelstat_output, 'w', encoding='utf-8') as f:
         for allele, count in sorted(allele_counts.items(), key=lambda kv: kv[1], reverse=True):
             if   allele[0] == 'R': allele_type = 'ref'
             elif allele[0] == 'D': allele_type = 'del'

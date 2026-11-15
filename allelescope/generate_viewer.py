@@ -114,7 +114,7 @@ def generate_html(variants, sequences, output_path, template_dir=None):
     # Render config.js
     config_template = env.get_template('config.js.j2')
     config_content = config_template.render(**template_data)
-    with open(str(output_dir / "config.js"), 'w') as f:
+    with open(str(output_dir / "config.js"), 'w', encoding='utf-8') as f:
         f.write(config_content)
     
     # Setup Jinja2 environment
@@ -129,7 +129,7 @@ def generate_html(variants, sequences, output_path, template_dir=None):
     )
     
     # Write output
-    with open(output_path, 'w') as f:
+    with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     
     print(f"Generated: {output_path}")

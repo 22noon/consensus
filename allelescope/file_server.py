@@ -16,7 +16,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from .process_variant import process_variant, ensure_current_bam_dir, PROCESSING_VERSION
+from .process_variant import process_variant, ensure_current_bam_dir, site_stem, PROCESSING_VERSION
 from .read_filters import filter_reads
 import shutil
 
@@ -165,7 +165,7 @@ def serve_bai(browser=None):
 
     Chrom = request.args.get("Chrom")
     Pos = request.args.get("Pos")
-    filename = f"variant_{Chrom}_{Pos}"
+    filename = site_stem(Chrom, Pos)
     params = request.args.to_dict()
     cache_key = build_cache_key(filename, *params.values())
     print(f"Cache key for BAI: {cache_key}", flush=True)
@@ -195,7 +195,7 @@ def serve_bam(browser=None):
     Chrom = request.args.get("Chrom")
     Pos = request.args.get("Pos")
     Ref = request.args.get("Ref")
-    filename = f"variant_{Chrom}_{Pos}"
+    filename = site_stem(Chrom, Pos)
 
     bam_file = ensure_current_bam_dir(serverpath) / f"{filename}.calmd.bam"
     if not bam_file.exists():
@@ -227,8 +227,8 @@ def isolate_reads(browser=None):
     pos   = params.get("Pos")
     print(f"ISOLATE_READS HIT: {browser}, {chrom}, {pos}, {filter_string}, token={token}", flush=True)
 
-    out_bam = serverpath / f"bam/variant_{chrom}_{pos}{token}.calmd.bam"
-    in_bam = serverpath / f"bam/variant_{chrom}_{pos}.calmd.bam"
+    out_bam = serverpath / "bam" / f"{site_stem(chrom, pos)}{token}.calmd.bam"
+    in_bam = serverpath / "bam" / f"{site_stem(chrom, pos)}.calmd.bam"
     print("EXTRACT_READS HIT:", browser, chrom, pos, filter_string, in_bam, out_bam, token, flush=True)
 
     if not in_bam or not os.path.exists(in_bam):
@@ -262,8 +262,8 @@ def remove_reads(browser=None):
     pos   = params.get("Pos")
     print(f"REMOVE_READS HIT: {browser}, {chrom}, {pos}, {filter_string}, token={token}", flush=True)
 
-    out_bam = serverpath / f"bam/variant_{chrom}_{pos}{token}.calmd.bam"
-    in_bam = serverpath / f"bam/variant_{chrom}_{pos}.calmd.bam"
+    out_bam = serverpath / "bam" / f"{site_stem(chrom, pos)}{token}.calmd.bam"
+    in_bam = serverpath / "bam" / f"{site_stem(chrom, pos)}.calmd.bam"
     print("REMOVE_READS HIT:", browser, chrom, pos, filter_string, in_bam, out_bam, token, flush=True)
 
     if not in_bam or not os.path.exists(in_bam):
@@ -311,7 +311,7 @@ def extract_reads(browser=None, token=None):
     pos   = params.get("Pos")
 
     # Mirror serve_bam exactly
-    filename  = f"variant_{chrom}_{pos}"
+    filename  = site_stem(chrom, pos)
     cache_key = build_cache_key(filename, *params.values())
     cache_dir = CACHE_ROOT / browser
     bam_path = cache_dir / f"{cache_key}.bam"
@@ -372,8 +372,8 @@ def extract_bam(browser=None):
 
     result = processed_bam(serverpath, Chrom, Pos, Ref)
     if result == 0:
-        stat_file=f"bam/variant_{Chrom}_{Pos}.bam.indelstats.txt"
-        with open(serverpath / stat_file) as f:
+        stat_file = serverpath / "bam" / f"{site_stem(Chrom, Pos)}.bam.indelstats.txt"
+        with open(stat_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 fields = line.split("\t")
@@ -409,10 +409,19 @@ def cache_info(browser=None):
 def clear_cache(browser=None):
     cache_dir = CACHE_ROOT if browser is None else CACHE_ROOT / browser
     print("CACHE_CLEAR HIT:", browser, cache_dir, flush=True)
+    skipped = []
     if cache_dir.exists():
-        shutil.rmtree(cache_dir)
+        # On Windows (including a Windows folder mounted into Docker) a file
+        # that is being served cannot be deleted. Skip such files rather than
+        # failing; they are removed by the next clear.
+        def _skip(func, path, exc):
+            skipped.append(str(path))
+
+        shutil.rmtree(cache_dir, onexc=_skip)
         cache_dir.mkdir(parents=True, exist_ok=True)
-    return jsonify({"success": True})
+        if skipped:
+            print(f"Cache clear skipped {len(skipped)} file(s) in use", flush=True)
+    return jsonify({"success": True, "skipped": len(skipped)})
 
 @app.route("/api/load_default_presets")
 def load_default_presets():
@@ -421,7 +430,7 @@ def load_default_presets():
         return jsonify({"error": "Presets file not found"}), 404
     
     try:
-        with open(preset_path, "r") as f:
+        with open(preset_path, "r", encoding="utf-8") as f:
             return jsonify(json.load(f))
     except Exception as e:
         return jsonify({"error": str(e)}), 500

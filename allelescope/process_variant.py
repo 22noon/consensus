@@ -1,6 +1,8 @@
 from .extract_mates import extract_mates, _write_indel_stats
 from .baq_filter import baq_filter
 from pathlib import Path
+import hashlib
+import re
 import threading
 import pysam
 
@@ -11,6 +13,28 @@ PROCESSING_VERSION = "2"
 _VERSION_FILE = ".allelescope_version"
 _checked_dirs = set()
 _check_lock = threading.Lock()
+
+
+_UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9._+-]")
+
+
+def site_stem(chrom, pos) -> str:
+    """
+    File-name stem for the per-site BAMs of chrom:pos, e.g. "variant_chr1_1200".
+
+    Sequence names may contain characters that are not allowed in file names
+    on Windows (GRCh38 has HLA contigs such as "HLA-A*01:01:01:01") or that
+    would act as path separators. Those characters are replaced by "_" and a
+    short hash of the original name is appended, so different names cannot
+    collide. Names made only of letters, digits and "._+-" are used as they
+    are, which keeps the file names of earlier versions.
+    """
+    chrom = str(chrom)
+    safe = _UNSAFE_NAME_CHARS.sub("_", chrom)
+    if safe != chrom or safe in ("", ".", ".."):
+        digest = hashlib.sha1(chrom.encode("utf-8")).hexdigest()[:8]
+        safe = f"{safe}-{digest}"
+    return f"variant_{safe}_{int(pos)}"
 
 
 def ensure_current_bam_dir(serverpath) -> Path:
@@ -28,7 +52,7 @@ def ensure_current_bam_dir(serverpath) -> Path:
             return bam_dir
         bam_dir.mkdir(parents=True, exist_ok=True)
         marker = bam_dir / _VERSION_FILE
-        current = marker.read_text().strip() if marker.exists() else None
+        current = marker.read_text(encoding="utf-8").strip() if marker.exists() else None
         if current != PROCESSING_VERSION:
             stale = [p for p in bam_dir.iterdir() if p.is_file() and p.name != _VERSION_FILE]
             if stale:
@@ -37,7 +61,7 @@ def ensure_current_bam_dir(serverpath) -> Path:
                       flush=True)
                 for p in stale:
                     p.unlink()
-            marker.write_text(PROCESSING_VERSION + "\n")
+            marker.write_text(PROCESSING_VERSION + "\n", encoding="utf-8")
         _checked_dirs.add(bam_dir)
     return bam_dir
 
@@ -63,10 +87,11 @@ def process_variant(
     bam_dir  = ensure_current_bam_dir(base)
     Ref      = base / f"{Ref}"
 
-    out_bam    = bam_dir / f"variant_{Chrom}_{Pos}.bam"
-    mates_bam  = bam_dir / f"variant_{Chrom}_{Pos}.mates.bam"
-    merged_tmp = bam_dir / f"variant_{Chrom}_{Pos}.bam.t"
-    calmd_bam  = bam_dir / f"variant_{Chrom}_{Pos}.calmd.bam"
+    stem       = site_stem(Chrom, Pos)
+    out_bam    = bam_dir / f"{stem}.bam"
+    mates_bam  = bam_dir / f"{stem}.mates.bam"
+    merged_tmp = bam_dir / f"{stem}.bam.t"
+    calmd_bam  = bam_dir / f"{stem}.calmd.bam"
     src_bam    = str(base / source_bam)
 
     try:
