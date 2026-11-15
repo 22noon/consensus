@@ -3,7 +3,11 @@
 }
 
 .show-empty .tab-empty {
-    display: block;
+    display: flex;
+}
+
+#chromTabs:not(.show-empty) .nav-item:has(> .tab-empty) {
+    display: none;
 }
 
 .allele-row-hidden {
@@ -252,3 +256,86 @@ table {
     display: flex; align-items: center; justify-content: center;
 }
 .sampling-card { width: min(28rem, 92vw); }
+/* ── Sequence list layouts (tabs.js: applyTabLayout) ── */
+#chromTabs .nav-link {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3em;
+}
+.chrom-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.chrom-count {
+    flex-shrink: 0;
+}
+#chromFilter,
+#chromSelect {
+    display: none;
+}
+.chrom-filtered {
+    display: none !important;
+}
+
+/* Tabs down the side */
+.chrom-layout[data-mode="vertical"] {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+.chrom-layout[data-mode="vertical"] .chrom-nav {
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: 6rem;
+    max-width: 40%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.chrom-layout[data-mode="vertical"].with-filter #chromFilter {
+    display: block;
+}
+.chrom-layout[data-mode="vertical"] #chromTabs {
+    flex-wrap: nowrap;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 350px;          /* same as the variant table */
+    white-space: normal;
+    border-right: 1px solid #dee2e6;
+    padding-right: 0.35rem;
+    gap: 2px;
+}
+.chrom-layout[data-mode="vertical"] #chromTabs .nav-link {
+    justify-content: space-between;
+    text-align: left;
+    width: 100%;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.85rem;
+}
+.chrom-layout[data-mode="vertical"] #chromTabs .nav-link:not(.active) {
+    color: var(--bs-body-color);
+}
+.chrom-layout[data-mode="vertical"] #chromTabs .nav-link:not(.active):hover {
+    background: #e9ecef;
+}
+.chrom-layout[data-mode="vertical"] #chromTabs .nav-link:not(.active) .chrom-count {
+    color: var(--bs-secondary-color);
+}
+.chrom-layout[data-mode="vertical"] #chromTabContent {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0 !important;
+}
+
+/* Drop-down list */
+.chrom-layout[data-mode="dropdown"] #chromSelect {
+    display: block;
+}
+.chrom-layout[data-mode="dropdown"] #chromTabs {
+    display: none;
+}
+.chrom-layout[data-mode="dropdown"] #chromTabContent {
+    margin-top: 0.5rem !important;
+}
