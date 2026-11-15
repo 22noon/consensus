@@ -249,14 +249,14 @@ function MapStrand(filters) {
 
     switch (strand) {
         case "plus":
-            // Keep only forward strand: filter out reverse
-            filters.flagf |= FLAG_REVERSE;
-            filters.flagF &= ~FLAG_REVERSE;
-            break;
-        case "minus":
-            // Keep only reverse strand: require reverse
+            // Keep only forward-strand reads: exclude the reverse flag
             filters.flagF |= FLAG_REVERSE;
             filters.flagf &= ~FLAG_REVERSE;
+            break;
+        case "minus":
+            // Keep only reverse-strand reads: require the reverse flag
+            filters.flagf |= FLAG_REVERSE;
+            filters.flagF &= ~FLAG_REVERSE;
             break;
         default:
             // No strand filtering
