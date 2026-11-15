@@ -172,7 +172,8 @@ function refreshCurrentView() {
     const variant = AppState.currentVariant;
     if (!variant) return;
 
-    const filter_string = Create_Filter_String(variant.chrom,variant.pos,getFilterSettings());
+    const site = alleleSite(variant);
+    const filter_string = Create_Filter_String(site.chrom, site.pos, getFilterSettings());
     const filterStateHash = getFilterStateHash(filter_string);
     if (filterStateHash === lastFilterStateHash) {return;}    // Skip reload if nothing changed
     lastFilterStateHash = filterStateHash;

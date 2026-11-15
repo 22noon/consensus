@@ -16,6 +16,7 @@ const AppState = {
     selectedReads:       new Set(),
     VariantList:         {},
     activeXAFilter:      new Set(),
+    alleleFilterSite:    null,     // "chrom:pos" the allele filter was set at
     Current:             { Chrom: "", Pos: "", Ref: "" },
     manualVariants:      {},   // { chrom: Set(positions) }
     lastMouseEvent:      null,

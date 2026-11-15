@@ -151,23 +151,7 @@ function buildVariantTabs(data) {
                 }
             });
 
-            row.addEventListener("click", () => {
-                document.querySelectorAll("tr.selected")
-                    .forEach(r => r.classList.remove("selected"));
-
-                row.classList.add("selected");
-
-                window.selectedVariant = {
-                    chrom: v.chrom, pos: v.pos,
-                    ref:   v.ref,   alt: v.alt, info: v.info
-                };
-
-                const flankSize = parseInt(
-                    document.getElementById('flank-size')?.value
-                ) || 100;
-
-                navigateToVariant(v, flankSize);
-            });
+            row.addEventListener("click", () => selectVariantRow(row, v));
 
             tbody.appendChild(row);
         });

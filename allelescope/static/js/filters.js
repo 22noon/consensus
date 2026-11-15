@@ -376,6 +376,7 @@ function resetFilters() {
     });
 
     localStorage.removeItem("igv_filters");
+    clearAlleleFilterState();
 
     // applyFilters() re-reads the UI, reloads the track and redraws the summary
     applyFilters();
@@ -445,9 +446,17 @@ function describeFilter(key, value) {
     return `${match[1] === "filter" ? "require" : "exclude"} ${name}`;
 }
 
-/* Badges that are not backed by a [data-filter-id] control register here. */
+/* Badges that are not backed by a [data-filter-id] control. */
 function extraActiveFilters() {
-    return [];
+    const extra = [];
+    if (AppState.activeXAFilter.size > 0) {
+        const alleles = [...AppState.activeXAFilter].map(describeAllele).join(", ");
+        extra.push({
+            label:  `require allele ${alleles}`,
+            remove: clearAlleleFilter
+        });
+    }
+    return extra;
 }
 
 function updateFilterSummary() {

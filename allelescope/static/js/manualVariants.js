@@ -50,29 +50,16 @@ function addManualVariantRow() {
             </td>
         `;
 
-        fetch(`${AppState.API_BASE}/api/extract?chrom=${chrom}&pos=${pos}&ref=${AppState.config.igvOptions.reference.fastaURL}`)
-            .then(response => {
-                if (!response.ok) {
-                    console.log(`Extraction request failed with status ${response.status}`);
-                    throw new Error('Network response was not ok');
-                }
-                return response.json();
-            })
-            .then(data => {
-                attachRowClickHandler(row, v);
-                insertRowSorted(tbody, row, pos);
-                JumptoRow(row, v);
-                console.log('Extracted data:', data);
-                if (data.alleles && data.alleles.length > 0) {
-                    buildAlleleFilterPanel(chrom, pos, data.alleles);
-                }
-            })
-            .catch(error => {
-                console.error('Error during extraction:', error);
+        fetchAlleles(alleleSite(v)).then(alleles => {
+            if (alleles === null) {
                 alert('Unable to extract reads for this position. Is this out of range?');
-            });
+                return;
+            }
+            attachRowClickHandler(row, v);
+            insertRowSorted(tbody, row, pos);
+            selectVariantRow(row, v, alleles);
+        });
 
-        row.click();  // auto select
         input.value = "";
     }
 }
@@ -96,18 +83,7 @@ function attachRowClickHandler(row, variant) {
 }
 
 function JumptoRow(row, variant) {
-    document.querySelectorAll("tr.selected")
-        .forEach(r => r.classList.remove("selected"));
-
-    if (AppState.selectedRow) {
-        AppState.selectedRow.classList.remove("selected");
-    }
-
-    row.classList.add("selected");
-    AppState.selectedRow = row;
-
-    const flankSize = parseInt(document.getElementById('flank-size').value) || 100;
-    navigateToVariant(variant, flankSize);
+    selectVariantRow(row, variant);
 }
 
 function clearManualVariants() {
