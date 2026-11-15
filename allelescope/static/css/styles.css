@@ -245,3 +245,10 @@ table {
 .dropdown-menu {
     z-index: 2000; /* higher than IGV */
 }
+/* Subsampling prompt for deep sites (sampling.js) */
+.sampling-overlay {
+    position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0, 0, 0, 0.35);
+    display: flex; align-items: center; justify-content: center;
+}
+.sampling-card { width: min(28rem, 92vw); }

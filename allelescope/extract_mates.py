@@ -1,3 +1,4 @@
+import hashlib
 import pysam
 import sys
 from collections import defaultdict
@@ -294,6 +295,19 @@ def _reference_base(ref_fasta, chrom, pos0):
     return base if len(base) == 1 and base in "ACGTN" else None
 
 
+def _name_rank(qname: str) -> bytes:
+    """Fixed pseudo-random sort key for a read name (same on every run)."""
+    return hashlib.blake2b(qname.encode("utf-8", "surrogateescape"), digest_size=8,
+                           person=b"allelescope").digest()
+
+
+def _choose_read_names(names, max_pairs):
+    """The read names to keep, or None to keep all."""
+    if not max_pairs or max_pairs <= 0 or len(names) <= max_pairs:
+        return None
+    return set(sorted(names, key=_name_rank)[:max_pairs])
+
+
 def _merge_positions(positions, gap):
     """
     Merge 0-based start positions into half-open fetch intervals.
@@ -319,6 +333,8 @@ def extract_mates(
     start: int,
     end: int,
     ref_fasta: str = None,
+    max_pairs: int = None,
+    sample_info: dict = None,
 ) -> defaultdict:
     """
     Extract overlapping reads and their mates for a genomic region.
@@ -347,6 +363,12 @@ def extract_mates(
         chrom:     Chromosome name
         start:     1-based start position
         end:       1-based end position
+        max_pairs: keep at most this many read pairs (fragments) crossing
+                   the site, chosen by a fixed hash of the read name; their
+                   mates and split partners are kept with them. Allele
+                   counts still use every read. None keeps everything.
+        sample_info: optional dict, filled with "pairs_total" and
+                   "pairs_kept".
         ref_fasta: indexed reference FASTA. Used to look up the reference
                    base at the site once; without it each read's MD tag
                    is parsed instead.
@@ -417,11 +439,29 @@ def extract_mates(
 
     # ---- Pass 1b: write every alignment overlapping the region, split or not ----
     print(f"Writing overlapping alignments to {out_bam}...")
+    # ---- Optional subsampling of the read pairs crossing the site ----
+    # Allele counts use every read; only the chosen read pairs are tagged,
+    # written and have their mates fetched. The choice is a fixed hash of the
+    # read name, so both mates and all split segments of a fragment are kept
+    # or dropped together, and the same reads are chosen every time.
+    names = {read.query_name for read in buffered_reads if not read.is_unmapped}
+    keep = _choose_read_names(names, max_pairs)
+    if sample_info is not None:
+        sample_info["pairs_total"] = len(names)
+        sample_info["pairs_kept"] = len(names) if keep is None else len(keep)
+
+    tagged_reads = []
     for read in buffered_reads:
         if read.is_unmapped:
             continue
-#        if read.query_name != "M02063:376:000000000-DYVFW:1:1101:22715:19471":
-#            continue
+        if keep is not None and read.query_name not in keep:
+            # Dropped from the display: only its allele call is needed.
+            if read.reference_start <= target_pos < read.reference_end:
+                covering[read.query_name].append(
+                    (read.is_supplementary, read.reference_start,
+                     get_allele_at_base(read, target_pos, site_ref_base))
+                )
+            continue
 
         XO = read.get_tag('XO') if read.has_tag('XO') else 0
         if overlaps_region(read) and crosses_as_pair(read.query_name):
@@ -445,7 +485,9 @@ def extract_mates(
         read.set_tag("XD", max_del,     value_type="i")
         read.set_tag("XN", max_ins,     value_type="i")
         read.set_tag("XS", summary_str, value_type="Z")
+        tagged_reads.append(read)
 
+    for read in tagged_reads:
         overlap_bam.write(calculate_softclip_lengths(read))
         written_records.add((read.query_name, read.reference_start))
 

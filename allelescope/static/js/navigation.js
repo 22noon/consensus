@@ -25,6 +25,7 @@ async function selectVariantRow(row, variant, knownAlleles) {
         .forEach(r => r.classList.remove("selected"));
     row.classList.add("selected");
     AppState.selectedRow = row;
+    AppState.currentSelection = { row, variant };
 
     window.selectedVariant = {
         chrom: variant.chrom, pos: variant.pos,

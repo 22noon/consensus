@@ -355,6 +355,9 @@ function Create_Filter_String(Chrom, pos, filters) {
                            ? [...AppState.activeXAFilter].join("|")
                            : ""
     });
+    // Which version of the site: a subsample, or (no parameter) every read.
+    const sample = typeof siteSampleParam === "function" ? siteSampleParam(Chrom, pos) : "";
+    if (sample) params.set("Sample", sample);
 
     return `?${params.toString()}`;
 }

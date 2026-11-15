@@ -16,7 +16,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from .process_variant import process_variant, ensure_current_bam_dir, site_stem, PROCESSING_VERSION
+from .process_variant import (process_variant, ensure_current_bam_dir, site_stem, site_sample,
+                              read_site_info, PROCESSING_VERSION)
 from .read_filters import filter_reads
 import shutil
 
@@ -115,8 +116,8 @@ def build_cache_key(*args):
     print(f"Cache key: {key}")
     return hashlib.md5(key).hexdigest()
 
-def processed_bam(serverpath, Chrom, Pos, Ref):
-    return process_variant(serverpath, Chrom, Pos, Ref)
+def processed_bam(serverpath, Chrom, Pos, Ref, sample=None):
+    return process_variant(serverpath, Chrom, Pos, Ref, sample=sample)
 
 
 def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
@@ -128,7 +129,8 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
     bam_file = ensure_current_bam_dir(serverpath) / f"{filename}{token}.calmd.bam"
     print(f"Getting filtered reads from BAM for {filename} with params {params} from {bam_file}", flush=True)
     if not bam_file.exists():
-        processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"))
+        processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"),
+                      sample=params.get("Sample"))
 
     return filter_reads(bam_file, params)
 
@@ -165,7 +167,7 @@ def serve_bai(browser=None):
 
     Chrom = request.args.get("Chrom")
     Pos = request.args.get("Pos")
-    filename = site_stem(Chrom, Pos)
+    filename = site_stem(Chrom, Pos, request.args.get("Sample"))
     params = request.args.to_dict()
     cache_key = build_cache_key(filename, *params.values())
     print(f"Cache key for BAI: {cache_key}", flush=True)
@@ -195,11 +197,12 @@ def serve_bam(browser=None):
     Chrom = request.args.get("Chrom")
     Pos = request.args.get("Pos")
     Ref = request.args.get("Ref")
-    filename = site_stem(Chrom, Pos)
+    Sample = request.args.get("Sample")
+    filename = site_stem(Chrom, Pos, Sample)
 
     bam_file = ensure_current_bam_dir(serverpath) / f"{filename}.calmd.bam"
     if not bam_file.exists():
-        processed_bam(serverpath, Chrom, Pos, Ref)
+        processed_bam(serverpath, Chrom, Pos, Ref, sample=Sample)
 
     params = request.args.to_dict()
     cache_key = build_cache_key(filename, *params.values())
@@ -227,8 +230,9 @@ def isolate_reads(browser=None):
     pos   = params.get("Pos")
     print(f"ISOLATE_READS HIT: {browser}, {chrom}, {pos}, {filter_string}, token={token}", flush=True)
 
-    out_bam = serverpath / "bam" / f"{site_stem(chrom, pos)}{token}.calmd.bam"
-    in_bam = serverpath / "bam" / f"{site_stem(chrom, pos)}.calmd.bam"
+    stem = site_stem(chrom, pos, params.get("Sample"))
+    out_bam = serverpath / "bam" / f"{stem}{token}.calmd.bam"
+    in_bam = serverpath / "bam" / f"{stem}.calmd.bam"
     print("EXTRACT_READS HIT:", browser, chrom, pos, filter_string, in_bam, out_bam, token, flush=True)
 
     if not in_bam or not os.path.exists(in_bam):
@@ -262,8 +266,9 @@ def remove_reads(browser=None):
     pos   = params.get("Pos")
     print(f"REMOVE_READS HIT: {browser}, {chrom}, {pos}, {filter_string}, token={token}", flush=True)
 
-    out_bam = serverpath / "bam" / f"{site_stem(chrom, pos)}{token}.calmd.bam"
-    in_bam = serverpath / "bam" / f"{site_stem(chrom, pos)}.calmd.bam"
+    stem = site_stem(chrom, pos, params.get("Sample"))
+    out_bam = serverpath / "bam" / f"{stem}{token}.calmd.bam"
+    in_bam = serverpath / "bam" / f"{stem}.calmd.bam"
     print("REMOVE_READS HIT:", browser, chrom, pos, filter_string, in_bam, out_bam, token, flush=True)
 
     if not in_bam or not os.path.exists(in_bam):
@@ -311,7 +316,7 @@ def extract_reads(browser=None, token=None):
     pos   = params.get("Pos")
 
     # Mirror serve_bam exactly
-    filename  = site_stem(chrom, pos)
+    filename  = site_stem(chrom, pos, params.get("Sample"))
     cache_key = build_cache_key(filename, *params.values())
     cache_dir = CACHE_ROOT / browser
     bam_path = cache_dir / f"{cache_key}.bam"
@@ -367,12 +372,13 @@ def extract_bam(browser=None):
     Chrom = request.args.get("chrom")
     Pos = request.args.get("pos")
     Ref = request.args.get("ref")
+    Sample = site_sample(request.args.get("sample"))
 
     mock_alleles = []
 
-    result = processed_bam(serverpath, Chrom, Pos, Ref)
+    result = processed_bam(serverpath, Chrom, Pos, Ref, sample=Sample)
     if result == 0:
-        stat_file = serverpath / "bam" / f"{site_stem(Chrom, Pos)}.bam.indelstats.txt"
+        stat_file = serverpath / "bam" / f"{site_stem(Chrom, Pos, Sample)}.bam.indelstats.txt"
         with open(stat_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -390,8 +396,49 @@ def extract_bam(browser=None):
                     "type": allele_type,
                 })
 
-        return jsonify({"success": True, "alleles": mock_alleles})
+        return jsonify({"success": True, "alleles": mock_alleles,
+                        "sampling": read_site_info(serverpath, Chrom, Pos, Sample)})
     return jsonify({"success": False}), 500
+
+
+@app.route("/api/depth")
+@app.route("/<path:browser>/api/depth")
+def site_depth(browser=None):
+    """
+    Quick look at a site before it is prepared: how many reads and read pairs
+    (fragments) cross it, and which versions of it are already prepared.
+
+        {"reads": 171234, "pairs": 120345,
+         "prepared": {"all": false, "samples": [2000]}}
+    """
+    serverpath = DATA_DIR if browser is None else DATA_DIR / browser
+    chrom = request.args.get("chrom")
+    pos = request.args.get("pos")
+    try:
+        pos0 = int(pos) - 1
+    except (TypeError, ValueError):
+        return jsonify({"error": "pos must be a number"}), 400
+
+    bam_dir = ensure_current_bam_dir(serverpath)
+    stem = site_stem(chrom, pos)
+    sample_re = re.compile(re.escape(stem) + r"\.s(\d+)\.calmd\.bam$")
+    samples = sorted(int(m.group(1)) for p in bam_dir.glob(f"{stem}.s*.calmd.bam")
+                     if (m := sample_re.match(p.name)))
+    prepared = {"all": (bam_dir / f"{stem}.calmd.bam").exists(), "samples": samples}
+
+    try:
+        with pysam.AlignmentFile(str(serverpath / "alignment.markdup.bam"), "rb") as bam:
+            names = set()
+            reads = 0
+            for read in bam.fetch(chrom, pos0, pos0 + 1):
+                if read.is_unmapped:
+                    continue
+                reads += 1
+                names.add(read.query_name)
+    except (OSError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({"reads": reads, "pairs": len(names), "prepared": prepared})
 
 @app.route("/api/cache_info")
 @app.route("/<path:browser>/api/cache_info")

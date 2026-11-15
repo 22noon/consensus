@@ -40,6 +40,39 @@ The `Info` cell is editable, so it can be used for a temporary annotation while
 reviewing a variant.  These edits are in the page only; they do not update the
 VCF or any server-side file.
 
+### Very deep sites: subsampling
+
+The first time you open a site, Allelescope prepares its reads (the reads
+crossing the site, their mates and split partners). Before doing this it
+counts the read pairs crossing the site. If there are more than 2,000, it asks:
+
+* **Subsample** shows the number of read pairs in the box (2,000 is suggested;
+  you can type another number). Pairs are chosen at random, but the choice is
+  fixed: a read always comes with its mate and split segments, and the same
+  reads are shown each time the site is opened.
+* **Use all reads** shows every read pair. At very high depth (for example a
+  viral sample at 100,000x or more) this takes noticeably longer to prepare and
+  to draw, and the view is crowded.
+
+Tick **Do the same for other deep sites in this session** to stop being asked
+again until the page is reloaded.
+
+The allele counts in **Alleles at _chromosome:position_** always use every
+read, whichever you choose. When a site is subsampled the panel says so, for
+example *Subsampled: showing 2,000 of 195,351 read pairs*, with a **Show all
+reads** button. A site shown in full has a **Subsample to 2,000** button.
+Your browser remembers the choice for each site of each instance.
+
+Filters, **Retain**/**Filter** of selected reads and **Export** work on the
+reads being shown. The subsampled and full versions of a site are kept
+separately on the server, so switching back to one you have already opened is
+quick.
+
+IGV has its own display limit: in a window with very many reads it draws only a
+sample of them (by default 500 reads per 100 bases), though its coverage track
+counts all of them. Subsampling here means the reads you select, filter and
+export are the same set the server prepared.
+
 The **Spanning Track** option shows or hides the `Spanning Reads Only` alignment
 track.  **View as Pairs** changes that track to IGV's paired-read display.
 The slider above the viewer changes the height of the spanning-read track.

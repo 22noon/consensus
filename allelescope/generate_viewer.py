@@ -35,7 +35,7 @@ def read_variants_from_vcf(vcf_path, sequences):
                 'pos': record.pos,
                 'ref': record.ref,
                 'alt': ','.join([str(a) for a in record.alts]) if record.alts else '',
-                'info': f"DP={record.info.get('DP', 'N/A')}"
+                'info': f"DP={record.info.get('DP', 'N/A') if 'DP' in record.header.info else 'N/A'}"
             })
         
         vcf.close()

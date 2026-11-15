@@ -74,20 +74,37 @@ function describeAllele(xa) {
 }
 
 /* Ask the server for the alleles observed at a site (null if it has no reads). */
+// Viewers built before sampling.js existed do not list it: load it here.
+if (typeof chooseSiteSample === "undefined") {
+    const script = document.createElement("script");
+    script.src = "/static/js/sampling.js";
+    document.head.appendChild(script);
+}
+
 async function fetchAlleles(site) {
+    // Deep sites: ask (once) whether to show a subsample. See sampling.js.
+    const sample = typeof chooseSiteSample === "function" ? await chooseSiteSample(site) : null;
     const params = new URLSearchParams({
         chrom: site.chrom,
         pos:   site.pos,
         ref:   AppState.config.igvOptions.reference.fastaURL
     });
+    if (sample) params.set("sample", sample);
+    // The first request for a site prepares it, which can take a while at
+    // high depth: show the loading indicator meanwhile.
+    if (typeof showLoading === "function") showLoading(true);
     try {
         const response = await fetch(`${AppState.API_BASE}/api/extract?${params.toString()}`);
         if (!response.ok) return null;
         const data = await response.json();
+        const entry = (AppState.siteSampling || {})[siteKey(site)];
+        if (entry) entry.info = data.sampling || null;
         return data.alleles || [];
     } catch (err) {
         console.error("Error during allele extraction:", err);
         return null;
+    } finally {
+        if (typeof showLoading === "function") showLoading(false);
     }
 }
 
@@ -182,6 +199,7 @@ function buildAlleleFilterPanel(variant, site, alleles) {
                 </div>
             </div>
             ${siteNote}
+            ${typeof samplingNoticeHtml === "function" ? samplingNoticeHtml(site) : ""}
             <div class="d-flex gap-3 align-items-center flex-wrap">
 
                 <div class="d-flex align-items-center gap-1">
