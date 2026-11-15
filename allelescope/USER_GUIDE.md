@@ -27,7 +27,18 @@ If the server is on a remote machine, create an SSH tunnel first (see the
 ## Find and inspect a called variant
 
 1. In **Variants**, select a chromosome tab.  The number in parentheses is the
-   number of called variants on that sequence.
+   number of called variants on that sequence.  For genomes with many
+   sequences (segmented viruses, assemblies with many contigs), choose how the
+   list is shown under **Sequence list** in the Variants gear menu:
+   * **Automatic** (default): tabs across the top while they all fit in one
+     row, otherwise tabs down the side;
+   * **Tabs across the top**: one row that scrolls sideways;
+   * **Tabs down the side**: a column beside the variant table, with a
+     **Find sequence** box once there are 9 or more sequences; long names are
+     shortened, and pointing at a tab shows the full name;
+   * **Drop-down list**: one compact list.
+
+   Your browser remembers the choice.
 2. Click a row in the `Pos / Ref / Alt / Info` table.  The row is highlighted
    and the alignment view moves to that site.
 3. Use **Flank (bp)** to choose how much sequence is shown on either side of a

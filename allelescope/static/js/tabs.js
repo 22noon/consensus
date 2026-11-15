@@ -143,6 +143,7 @@ function toggleEmptyTabs(showEmpty) {
         const firstVisible = tabsContainer.querySelector(".nav-link:not(.tab-empty)");
         bootstrap?.Tab.getOrCreateInstance(firstVisible)?.show();
     }
+    applyTabLayout();
 }
 
 function initEmptyTabsToggle() {
@@ -154,6 +155,177 @@ function initEmptyTabsToggle() {
 }
 
 document.addEventListener("DOMContentLoaded", initEmptyTabsToggle);
+
+/*
+ * Layout of the sequence (chromosome / segment / contig) list
+ *
+ *   horizontal  tabs in a row (scrolls sideways when there are many)
+ *   vertical    tabs in a column beside the variant table, with a search
+ *               box when the list is long
+ *   dropdown    a single drop-down list
+ *   auto        horizontal while every tab fits in one row, otherwise vertical
+ *
+ * The choice is set in the Variants gear menu and remembered in the browser.
+ * The controls are added here rather than in the page template, so viewers
+ * built earlier get them too.
+ */
+const TAB_LAYOUT_KEY        = "allelescope.tabLayout";
+const TAB_SEARCH_MIN_TABS   = 9;   // vertical list: show the search box from this many tabs
+let   lastAutoLayoutWidth   = 0;
+
+function escapeTabText(text) {
+    return String(text).replace(/[&<>"']/g, c => (
+        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function getTabLayoutChoice() {
+    try {
+        const v = localStorage.getItem(TAB_LAYOUT_KEY);
+        return ["auto", "horizontal", "vertical", "dropdown"].includes(v) ? v : "auto";
+    } catch (e) {
+        return "auto";
+    }
+}
+
+function setTabLayoutChoice(choice) {
+    try { localStorage.setItem(TAB_LAYOUT_KEY, choice); } catch (e) { /* page-only */ }
+    applyTabLayout();
+}
+
+function ensureTabLayoutControls() {
+    const tabs    = document.getElementById("chromTabs");
+    const content = document.getElementById("chromTabContent");
+    if (!tabs || !content) return null;
+
+    let layout = document.getElementById("chromTabsLayout");
+    if (!layout) {
+        layout = document.createElement("div");
+        layout.id = "chromTabsLayout";
+        layout.className = "chrom-layout";
+        tabs.parentElement.insertBefore(layout, tabs);
+
+        const nav = document.createElement("div");
+        nav.id = "chromNav";
+        nav.className = "chrom-nav";
+        nav.innerHTML = `
+            <input type="search" id="chromFilter" class="form-control form-control-sm"
+                   placeholder="Find sequence" aria-label="Find sequence">
+            <select id="chromSelect" class="form-select form-select-sm"
+                    aria-label="Sequence"></select>`;
+        nav.appendChild(tabs);
+        layout.appendChild(nav);
+        layout.appendChild(content);
+
+        nav.querySelector("#chromFilter").addEventListener("input", filterTabList);
+        nav.querySelector("#chromSelect").addEventListener("change", e => {
+            const btn = document.getElementById(e.target.value);
+            if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
+        });
+        tabs.addEventListener("shown.bs.tab", syncTabSelect);
+
+        // "auto" depends on the width available: re-check when it changes.
+        if (typeof ResizeObserver === "function") {
+            new ResizeObserver(entries => {
+                const width = Math.round(entries[0].contentRect.width);
+                if (getTabLayoutChoice() === "auto" && width && width !== lastAutoLayoutWidth) {
+                    lastAutoLayoutWidth = width;
+                    applyTabLayout();
+                }
+            }).observe(layout);
+        }
+    }
+
+    // Layout choice in the Variants gear menu, under "Show empty chromosomes".
+    if (!document.getElementById("tab-layout-select")) {
+        const anchor = document.getElementById("toggle-empty-tabs-switch")?.closest(".form-check");
+        if (anchor) {
+            const block = document.createElement("div");
+            block.className = "mb-2";
+            block.innerHTML = `
+                <label for="tab-layout-select" class="form-label small mb-1">Sequence list</label>
+                <select id="tab-layout-select" class="form-select form-select-sm">
+                    <option value="auto">Automatic</option>
+                    <option value="horizontal">Tabs across the top</option>
+                    <option value="vertical">Tabs down the side</option>
+                    <option value="dropdown">Drop-down list</option>
+                </select>`;
+            anchor.after(block);
+            const select = block.querySelector("select");
+            select.value = getTabLayoutChoice();
+            select.addEventListener("change", () => setTabLayoutChoice(select.value));
+            // Keep the menu open while the select is used.
+            block.addEventListener("click", e => e.stopPropagation());
+        }
+    }
+    return layout;
+}
+
+function visibleTabButtons() {
+    const tabs = document.getElementById("chromTabs");
+    if (!tabs) return [];
+    const showEmpty = tabs.classList.contains("show-empty");
+    return [...tabs.querySelectorAll(".nav-link")]
+        .filter(btn => showEmpty || !btn.classList.contains("tab-empty"));
+}
+
+function setTabMode(layout, tabs, mode) {
+    layout.dataset.mode = mode;
+    const vertical = mode === "vertical";
+    tabs.classList.toggle("nav-tabs", !vertical);
+    tabs.classList.toggle("nav-pills", vertical);
+    tabs.classList.toggle("flex-column", vertical);
+}
+
+function applyTabLayout() {
+    const layout = ensureTabLayoutControls();
+    const tabs   = document.getElementById("chromTabs");
+    if (!layout || !tabs) return;
+
+    const buttons = visibleTabButtons();
+    let mode = getTabLayoutChoice();
+    if (mode === "auto") {
+        // Lay the tabs out in a row and see whether they fit.
+        setTabMode(layout, tabs, "horizontal");
+        if (buttons.length <= 1) {
+            mode = "horizontal";
+        } else if (tabs.clientWidth > 0) {
+            mode = tabs.scrollWidth > tabs.clientWidth + 1 ? "vertical" : "horizontal";
+        } else {
+            mode = buttons.length > 4 ? "vertical" : "horizontal";   // pane hidden: guess
+        }
+    }
+    setTabMode(layout, tabs, mode);
+
+    const longList = mode === "vertical" && buttons.length >= TAB_SEARCH_MIN_TABS;
+    layout.classList.toggle("with-filter", longList);
+    if (!longList) {
+        document.getElementById("chromFilter").value = "";
+    }
+    filterTabList();
+
+    const select = document.getElementById("chromSelect");
+    select.innerHTML = buttons.map(btn =>
+        `<option value="${escapeTabText(btn.id)}">${escapeTabText(btn.title)} `
+        + `${escapeTabText(btn.querySelector(".chrom-count")?.textContent || "")}</option>`).join("");
+    syncTabSelect();
+    tabs.querySelector(".nav-link.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function filterTabList() {
+    const input = document.getElementById("chromFilter");
+    const text  = (input?.value || "").trim().toLowerCase();
+    document.querySelectorAll("#chromTabs .nav-item").forEach(li => {
+        const btn = li.querySelector(".nav-link");
+        const match = !text || (btn?.title || "").toLowerCase().includes(text);
+        li.classList.toggle("chrom-filtered", !match);
+    });
+}
+
+function syncTabSelect() {
+    const select = document.getElementById("chromSelect");
+    const active = document.querySelector("#chromTabs .nav-link.active");
+    if (select && active) select.value = active.id;
+}
 
 function buildVariantTabs(data) {
     const tabsContainer    = document.getElementById("chromTabs");
@@ -221,7 +393,9 @@ function buildVariantTabs(data) {
         btn.dataset.count    = variants.length;
         btn.type             = "button";
         btn.role             = "tab";
-        btn.textContent      = `${chrom} (${variants.length})`;
+        btn.title            = chrom;
+        btn.innerHTML        = `<span class="chrom-name">${escapeTabText(chrom)}</span>`
+                             + `<span class="chrom-count">(${variants.length})</span>`;
 
         if (variants.length === 0) btn.classList.add("tab-empty");
 
@@ -287,6 +461,8 @@ function buildVariantTabs(data) {
         pane.appendChild(wrapper);
         contentContainer.appendChild(pane);
     });
+
+    applyTabLayout();
 
     if (!tabsContainer.dataset.emptyTabTrackListener) {
         tabsContainer.addEventListener("shown.bs.tab", () => {
