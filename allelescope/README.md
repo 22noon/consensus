@@ -6,6 +6,8 @@ Allelescope requires minimally a sorted bam file and a reference. If a VCF file 
 
 For instructions on using the generated viewer, see the [Allelescope user guide](USER_GUIDE.md).
 
+To try Allelescope without your own data, use the small synthetic dataset in [`demo/`](../demo/README.md); it builds a browser instance in a few seconds.
+
 ---
 ## Installation
 Allelescope can be obtained from PyPI. You can simply type 
