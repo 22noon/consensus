@@ -1,5 +1,4 @@
 from .extract_mates import extract_mates, _write_indel_stats
-from .baq_filter import baq_filter
 from pathlib import Path
 import hashlib
 import re
@@ -9,7 +8,9 @@ import pysam
 # Bump whenever the tags written to the per-site BAMs change meaning, so that
 # files produced by an older version are rebuilt instead of being reused.
 #   2: XO "proper" covers both F1R2 and R1F2 proper pairs
-PROCESSING_VERSION = "2"
+#   3: XA reference/mismatch decided against the FASTA rather than MD tags;
+#      BQ (BAQ) only on reads that cross the site
+PROCESSING_VERSION = "3"
 _VERSION_FILE = ".allelescope_version"
 _checked_dirs = set()
 _check_lock = threading.Lock()
@@ -35,6 +36,13 @@ def site_stem(chrom, pos) -> str:
         digest = hashlib.sha1(chrom.encode("utf-8")).hexdigest()[:8]
         safe = f"{safe}-{digest}"
     return f"variant_{safe}_{int(pos)}"
+
+
+def _calmd(in_bam, ref, out_bam, baq):
+    """samtools calmd [-r] in_bam ref > out_bam (BAM output)."""
+    args = ["-b", "-r"] if baq else ["-b"]
+    data = pysam.calmd(*args, str(in_bam), str(ref))
+    Path(out_bam).write_bytes(data if isinstance(data, bytes) else data.encode())
 
 
 def ensure_current_bam_dir(serverpath) -> Path:
@@ -112,10 +120,10 @@ def process_variant(
         return 1
 
     # Already processed — skip
-    if out_bam.exists():
+    # The served file is the last one written, so it marks a finished site.
+    if calmd_bam.exists() and out_bam.exists():
         return 0
 
-    # --- Step 1: extract overlapping reads + mates ---
     allele_counts = extract_mates(
         src_bam   = src_bam,
         out_bam   = str(out_bam),
@@ -123,44 +131,34 @@ def process_variant(
         chrom     = Chrom,
         start     = int(Pos),
         end       = int(Pos),
+        ref_fasta = str(Ref),
     )
     _write_indel_stats(allele_counts, str(out_bam))
-
-    if not mates_bam.exists() or mates_bam.stat().st_size == 0:
-        print(f"No mates found for {Chrom}:{Pos}, creating empty BAM")
-    else:
-        print(f"Mates found for {Chrom}:{Pos}, sorting and merging...")
-
-        # --- Step 2: sort mates ---
-        pysam.sort("-@", str(threads), "-o", str(mates_bam), str(mates_bam))
-
-        # --- Step 3: merge spanning reads + mates ---
-        pysam.merge("-f", "-c", "-o", str(merged_tmp), str(out_bam), str(mates_bam))
-        mates_bam.unlink()
-
-        # --- Step 4: calmd (recalculate MD/NM tags against reference) ---
-        #calmd_bytes = pysam.calmd("-b", "-r", str(merged_tmp), Ref)
-        calmd_bytes = pysam.calmd("-b", "-r", str(merged_tmp), str(Ref))
-
-        calmd_bam.write_bytes(
-            calmd_bytes if isinstance(calmd_bytes, bytes) else calmd_bytes.encode()
-        )
-        pysam.index(str(calmd_bam))
-        merged_tmp.unlink()
-
-        # --- Step 5: BAQ filter + annotation ---
-        baq_filter(
-            chrom         = Chrom,
-            pos           = int(Pos),
-            in_bam        = str(calmd_bam),
-            out_bam       = str(out_bam),
-            window        = window,
-            primary_only  = primary_only,
-            add_indel_tags = add_indel_tags,
-        )
-
-    # --- Step 6: index and count ---
     pysam.index(str(out_bam))
+
+    # Recompute MD/NM against the reference for every record (samtools
+    # calmd). Base alignment quality (BQ tag, calmd -r) is only computed for
+    # the reads that cross the site: it is only ever evaluated there, and
+    # BAQ is the costly part. Mates and split partners do not reach the site.
+    site_part = bam_dir / f"{stem}.site.calmd.bam"
+    _calmd(out_bam, Ref, site_part, baq=True)
+
+    if mates_bam.exists() and mates_bam.stat().st_size > 0:
+        print(f"Mates found for {Chrom}:{Pos}, sorting and merging...")
+        mates_sorted = bam_dir / f"{stem}.mates.sorted.bam"
+        mates_part   = bam_dir / f"{stem}.mates.calmd.bam"
+        pysam.sort("-@", str(threads), "-o", str(mates_sorted), str(mates_bam))
+        _calmd(mates_sorted, Ref, mates_part, baq=False)
+        pysam.merge("-f", "-c", "-o", str(merged_tmp), str(site_part), str(mates_part))
+        for tmp in (mates_bam, mates_sorted, mates_part, site_part):
+            tmp.unlink(missing_ok=True)
+    else:
+        print(f"No mates found for {Chrom}:{Pos}")
+        mates_bam.unlink(missing_ok=True)
+        site_part.replace(merged_tmp)
+
+    pysam.index(str(merged_tmp), str(calmd_bam) + ".bai")
+    merged_tmp.replace(calmd_bam)
 
     with pysam.AlignmentFile(str(out_bam), "rb") as bam:
         count = bam.count()

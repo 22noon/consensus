@@ -21,10 +21,15 @@ def summarise_indels(indels):
     return net, ','.join(parts), max_del, max_ins
 
 
-def get_allele_at_base(read, target_pos):
+def get_allele_at_base(read, target_pos, ref_base=None):
     """
     Returns a descriptive allele string for what the read shows
     at target_pos (0-based reference coordinate).
+
+    ``ref_base`` is the reference base at target_pos. It is the same for
+    every read, so callers should look it up once; without it the base is
+    parsed from each read's MD tag, which is slower and wrong when the BAM
+    has no MD tags.
 
     Returns one of:
       'D<len>'    — deletion e.g. 'D7'
@@ -94,7 +99,8 @@ def get_allele_at_base(read, target_pos):
                 elif op == 8:
                     return f"M{base}"
                 else:
-                    ref_base = get_ref_base_from_md(read, target_pos)
+                    if ref_base is None:
+                        ref_base = get_ref_base_from_md(read, target_pos)
                     if ref_base is None:
                         return f"R{base}"   # can't tell, assume ref
                     elif base == ref_base:
@@ -276,6 +282,18 @@ existing project modules, same as the original implementation):
 MATE_FETCH_MERGE_GAP = 1000
 
 
+def _reference_base(ref_fasta, chrom, pos0):
+    """Upper-case reference base at a 0-based position, or None if unavailable."""
+    if not ref_fasta:
+        return None
+    try:
+        with pysam.FastaFile(str(ref_fasta)) as fasta:
+            base = fasta.fetch(chrom, pos0, pos0 + 1).upper()
+    except (OSError, ValueError, KeyError, IndexError):
+        return None
+    return base if len(base) == 1 and base in "ACGTN" else None
+
+
 def _merge_positions(positions, gap):
     """
     Merge 0-based start positions into half-open fetch intervals.
@@ -300,6 +318,7 @@ def extract_mates(
     chrom: str,
     start: int,
     end: int,
+    ref_fasta: str = None,
 ) -> defaultdict:
     """
     Extract overlapping reads and their mates for a genomic region.
@@ -328,12 +347,17 @@ def extract_mates(
         chrom:     Chromosome name
         start:     1-based start position
         end:       1-based end position
+        ref_fasta: indexed reference FASTA. Used to look up the reference
+                   base at the site once; without it each read's MD tag
+                   is parsed instead.
 
     Returns:
         allele_counts: dict mapping allele string -> read count (one
         observation per physical read/fragment, deterministic).
     """
     allele_counts = defaultdict(int)
+
+    site_ref_base = _reference_base(ref_fasta, chrom, start - 1)
 
     bam = pysam.AlignmentFile(src_bam, "rb")
     header = bam.header.to_dict()
@@ -404,7 +428,7 @@ def extract_mates(
             XO |= Tag_bits['OVERLAP']
         read = tag_read(read, XO)
 
-        allele = get_allele_at_base(read, target_pos)
+        allele = get_allele_at_base(read, target_pos, site_ref_base)
         indels = get_indels_at_base(read, target_pos)
         signed_len, summary_str, max_del, max_ins = summarise_indels(indels)
 

@@ -53,7 +53,7 @@ def parse_sa_tag(sa_string):
     return entries
 
 
-def get_allele_at_base(read, target_pos):
+def get_allele_at_base(read, target_pos, ref_base=None):
     """Return the query base aligned to 0-based reference target_pos, or None."""
     for qpos, rpos in read.get_aligned_pairs(matches_only=True):
         if rpos == target_pos:
