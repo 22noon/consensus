@@ -1,7 +1,45 @@
 from .extract_mates import extract_mates, _write_indel_stats
 from .baq_filter import baq_filter
 from pathlib import Path
+import threading
 import pysam
+
+# Bump whenever the tags written to the per-site BAMs change meaning, so that
+# files produced by an older version are rebuilt instead of being reused.
+#   2: XO "proper" covers both F1R2 and R1F2 proper pairs
+PROCESSING_VERSION = "2"
+_VERSION_FILE = ".allelescope_version"
+_checked_dirs = set()
+_check_lock = threading.Lock()
+
+
+def ensure_current_bam_dir(serverpath) -> Path:
+    """
+    Make sure <instance>/bam only holds per-site BAMs written by this version.
+
+    The per-site BAMs are a cache: they are rebuilt on demand from
+    alignment.markdup.bam. If the directory was filled by an older version
+    (no marker, or a different one) its contents are deleted so every site is
+    re-extracted with the current tags. Checked once per directory per process.
+    """
+    bam_dir = Path(serverpath) / "bam"
+    with _check_lock:
+        if bam_dir in _checked_dirs:
+            return bam_dir
+        bam_dir.mkdir(parents=True, exist_ok=True)
+        marker = bam_dir / _VERSION_FILE
+        current = marker.read_text().strip() if marker.exists() else None
+        if current != PROCESSING_VERSION:
+            stale = [p for p in bam_dir.iterdir() if p.is_file() and p.name != _VERSION_FILE]
+            if stale:
+                print(f"Per-site BAMs in {bam_dir} were written by an older version "
+                      f"({current or 'unversioned'}); removing {len(stale)} file(s) so they are rebuilt.",
+                      flush=True)
+                for p in stale:
+                    p.unlink()
+            marker.write_text(PROCESSING_VERSION + "\n")
+        _checked_dirs.add(bam_dir)
+    return bam_dir
 
 
 def process_variant(
@@ -22,8 +60,7 @@ def process_variant(
     print(f"Processing BAM for {Chrom}:{Pos} ref={Ref}", flush=True)
 
     base     = Path(serverpath)
-    bam_dir  = base / "bam"
-    bam_dir.mkdir(parents=True, exist_ok=True)
+    bam_dir  = ensure_current_bam_dir(base)
     Ref      = base / f"{Ref}"
 
     out_bam    = bam_dir / f"variant_{Chrom}_{Pos}.bam"

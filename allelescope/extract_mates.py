@@ -231,6 +231,12 @@ def get_pair_orientation(read):
         return f"{read1_strand}{read2_strand}"
 
 
+# Orientations of a normal inward-facing (FR) pair. Which mate lies on the
+# forward strand depends only on which strand of the fragment was read first,
+# so both are equally "proper".
+PROPER_ORIENTATIONS = ("F1R2", "R1F2")
+
+
 def tag_read(read, XO):
     if read.has_tag('SA'):
         XO |= Tag_bits['SPLIT']
@@ -240,10 +246,10 @@ def tag_read(read, XO):
         read.set_tag('XR', orientation)
         if orientation in Tag_bits:
             XO |= Tag_bits[orientation]
-        if orientation != "F1R2" or not read.is_proper_pair:
-            XO |= Tag_bits['IMPROPER']
-        else:
+        if read.is_proper_pair and orientation in PROPER_ORIENTATIONS:
             XO |= Tag_bits['PROPER']
+        else:
+            XO |= Tag_bits['IMPROPER']
     read.set_tag('XO', XO)
     return read
 

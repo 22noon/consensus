@@ -16,7 +16,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from .process_variant import process_variant
+from .process_variant import process_variant, ensure_current_bam_dir, PROCESSING_VERSION
 import shutil
 
 
@@ -118,7 +118,9 @@ def send_file_with_range(path: Path, mimetype="application/octet-stream"):
 
 
 def build_cache_key(*args):
-    key = "|".join(str(a) for a in args).encode()
+    # PROCESSING_VERSION is part of the key so filtered BAMs cached by an
+    # older version (different tag or filter semantics) are never reused.
+    key = "|".join(str(a) for a in (PROCESSING_VERSION, *args)).encode()
     print(f"Cache key: {key}")
     return hashlib.md5(key).hexdigest()
 
@@ -132,7 +134,7 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
     Returns a list of filtered AlignedSegment reads.
     """
     token = params.get("Token")
-    bam_file = serverpath / "bam" / f"{filename}{token}.calmd.bam"
+    bam_file = ensure_current_bam_dir(serverpath) / f"{filename}{token}.calmd.bam"
     print(f"Getting filtered reads from BAM for {filename} with params {params} from {bam_file}", flush=True)
     if not bam_file.exists():
         processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"))
@@ -264,7 +266,7 @@ def serve_bam(browser=None):
     Ref = request.args.get("Ref")
     filename = f"variant_{Chrom}_{Pos}"
 
-    bam_file = serverpath / "bam" / f"{filename}.calmd.bam"
+    bam_file = ensure_current_bam_dir(serverpath) / f"{filename}.calmd.bam"
     if not bam_file.exists():
         processed_bam(serverpath, Chrom, Pos, Ref)
 
