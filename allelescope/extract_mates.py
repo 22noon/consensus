@@ -271,6 +271,28 @@ existing project modules, same as the original implementation):
     summarise_indels(indels)
 """
 
+# Targets on one sequence closer together than this (bp) share a fetch.
+# Reading a short gap of alignments costs less than an extra index seek.
+MATE_FETCH_MERGE_GAP = 1000
+
+
+def _merge_positions(positions, gap):
+    """
+    Merge 0-based start positions into half-open fetch intervals.
+
+    Positions less than ``gap`` bp apart end up in the same interval; each
+    interval ends one base after its last position, which is enough for
+    ``fetch`` to return the records that start there.
+    """
+    intervals = []
+    for pos in sorted(positions):
+        if intervals and pos - (intervals[-1][1] - 1) <= gap:
+            intervals[-1][1] = pos + 1
+        else:
+            intervals.append([pos, pos + 1])
+    return [tuple(iv) for iv in intervals]
+
+
 def extract_mates(
     src_bam: str,
     out_bam: str,
@@ -438,37 +460,49 @@ def extract_mates(
             scan_by_chrom[c].add(p)
 
     # ---- Pass 2: fetch and write the outstanding mates / split partners ----
-    WINDOW = 300
+    # Every target is an exact (chrom, start) taken from RNEXT/PNEXT or the
+    # SA tag, and a record is only accepted if its reference_start equals it.
+    # Around a deep site the targets are thousands of positions within a few
+    # hundred bp, so fetching a window per target decoded the same reads over
+    # and over (cost ~ number of targets x depth). Instead the targets on each
+    # sequence are merged into a few intervals, each record is read once, and
+    # its start position (an int) is checked before its name is decoded.
     n_targets = sum(len(v) for v in to_check.values())
     print(f"Fetching {n_targets} additional alignment(s) for {len(to_check)} read(s) "
           f"and writing to {mates_bam}...")
 
     for scan_chrom, positions in scan_by_chrom.items():
-        for pos in sorted(positions, reverse=True):
+        for fetch_start, fetch_end in _merge_positions(positions, MATE_FETCH_MERGE_GAP):
+            if not to_check:
+                break
             try:
-                for cand in bam.fetch(scan_chrom, max(0, pos - WINDOW), pos + WINDOW):
-                    if cand.is_unmapped:
+                candidates = bam.fetch(scan_chrom, fetch_start, fetch_end)
+                for cand in candidates:
+                    if cand.reference_start not in positions or cand.is_unmapped:
                         continue
-                    key = (cand.query_name, cand.reference_start)
+                    qname = cand.query_name
+                    remaining = to_check.get(qname)
+                    if remaining is None:
+                        continue
+                    key = (qname, cand.reference_start)
                     if key in written_records:
                         continue
-                    if cand.query_name not in to_check:
-                        continue
 
-                    remaining = to_check[cand.query_name]
                     for i, (exp_chrom, exp_pos, kind) in enumerate(remaining):
-                        if cand.reference_name == exp_chrom and cand.reference_start == exp_pos:
+                        if cand.reference_start == exp_pos and cand.reference_name == exp_chrom:
                             XO = cand.get_tag('XO') if cand.has_tag('XO') else 0
                             XO |= Tag_bits['NON_SPANNING_MATE'] if kind == 'MATE' else Tag_bits['SPLITX']
                             cand = tag_read(cand, XO)
-                            cand.set_tag("XA", XA_dict.get(cand.query_name, ""), value_type="Z")
+                            cand.set_tag("XA", XA_dict.get(qname, ""), value_type="Z")
                             mate.write(calculate_softclip_lengths(cand))
                             written_records.add(key)
                             del remaining[i]
                             if not remaining:
-                                del to_check[cand.query_name]
+                                del to_check[qname]
                             break
-            except pysam.utils.SamtoolsError:
+            except (ValueError, pysam.utils.SamtoolsError):
+                # Sequence named in RNEXT/SA but absent from the BAM header
+                # (ValueError), or an htslib read error: skip these targets.
                 pass
 
     mate.close()
