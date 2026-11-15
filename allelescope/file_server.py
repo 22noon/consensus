@@ -16,7 +16,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from .process_variant import process_variant
+from .process_variant import process_variant, ensure_current_bam_dir, PROCESSING_VERSION
+from .read_filters import filter_reads
 import shutil
 
 
@@ -39,16 +40,6 @@ if not DATA_DIR.is_dir():
 # -----------------------------
 # Helpers (from complex server)
 # -----------------------------
-def escape_xa_filter(xa_filter):
-    """
-    Escape regex metacharacters in XA allele strings for samtools -e.
-    Preserves | as the alternation separator between alleles.
-    """
-    alleles = xa_filter.split("|")
-    escaped = [re.escape(a) for a in alleles]
-    return "|".join(escaped)
-
-
 def get_mimetype(filename):
     mimetype, _ = mimetypes.guess_type(filename)
     overrides = {
@@ -118,7 +109,9 @@ def send_file_with_range(path: Path, mimetype="application/octet-stream"):
 
 
 def build_cache_key(*args):
-    key = "|".join(str(a) for a in args).encode()
+    # PROCESSING_VERSION is part of the key so filtered BAMs cached by an
+    # older version (different tag or filter semantics) are never reused.
+    key = "|".join(str(a) for a in (PROCESSING_VERSION, *args)).encode()
     print(f"Cache key: {key}")
     return hashlib.md5(key).hexdigest()
 
@@ -128,76 +121,16 @@ def processed_bam(serverpath, Chrom, Pos, Ref):
 
 def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
     """
-    Pure-Python replacement for build_samtools_view_cmd.
-    Returns a list of filtered AlignedSegment reads.
+    Return (header, reads) for the per-site BAM after applying the filter
+    parameters. The filter rules live in read_filters.py.
     """
-    token = params.get("Token")
-    bam_file = serverpath / "bam" / f"{filename}{token}.calmd.bam"
+    token = params.get("Token") or ""
+    bam_file = ensure_current_bam_dir(serverpath) / f"{filename}{token}.calmd.bam"
     print(f"Getting filtered reads from BAM for {filename} with params {params} from {bam_file}", flush=True)
     if not bam_file.exists():
         processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"))
 
-    flag_f = int(params.get("Flagf", 0))  # -f: read must have ALL these bits set
-    flag_F = int(params.get("FlagF", 0))  # -F: read must have NONE of these bits set
-    tag_f  = int(params.get("Tagf", 0))   # XO tag: all bits must be set
-    tag_F  = int(params.get("TagF", 0))   # XO tag: all bits must be unset
-    max_nm = int(params.get("EditDistance", 0))
-    soft_clip_f = int(params.get("SoftClip", 0))  # minimum soft clip length to include
-    soft_clip_F = int(params.get("SoftClipF", 0))  # maximum soft clip length to include
-    xa_filter = escape_xa_filter(params.get("XAFilter", "").strip())
-    xa_set = set(xa_filter.split("|")) if xa_filter else None
-
-
-    reads = []
-    with pysam.AlignmentFile(str(bam_file), "rb") as bam:
-        header = bam.header
-        for read in bam:
-            # -f: skip if read doesn't have ALL required bits
-            if flag_f and (read.flag & flag_f) != flag_f:
-                continue
-
-            # -F: skip if read has ANY of the excluded bits
-            if flag_F and (read.flag & flag_F):
-                continue
-
-            # XO tag inclusion: ([XO] & Tagf) == Tagf
-            if tag_f:
-                xo = read.get_tag("XO") if read.has_tag("XO") else 0
-                if (xo & tag_f) != tag_f:
-                    continue
-
-            # XO tag exclusion: ([XO] & TagF) == 0
-            if tag_F:
-                xo = read.get_tag("XO") if read.has_tag("XO") else 0
-                if (xo & tag_F) != 0:
-                    continue
-
-            # NM (edit distance): [NM] <= EditDistance
-            if max_nm:
-                nm = read.get_tag("NM") if read.has_tag("NM") else 0
-                if nm > max_nm:
-                    continue
-
-            # XA tag regex filter 
-            if xa_filter:
-                if read.has_tag("XA"):
-                    xa = read.get_tag("XA")
-                    if xa not in xa_set:
-                        continue
-                    # replaced the regex version as complicated to replace exact matches with escapes : if not re.search(xa_filter, read.get_tag("XA")):
-                else:
-                    continue  # no XA tag → let it through, same as samtools -e guard
-            if soft_clip_f or soft_clip_F:
-                sr = read.get_tag("SR");
-                sl = read.get_tag("SL");
-                clip_length = sr+sl
-                if soft_clip_f and clip_length < soft_clip_f:
-                    continue
-                if soft_clip_F and clip_length > soft_clip_F:
-                    continue
-
-            reads.append(read)
-    return header, reads
+    return filter_reads(bam_file, params)
 
 def build_filtered_bam(serverpath, cache_dir, filename, cache_key, params):
     bam_path = cache_dir / f"{cache_key}.bam"
@@ -264,7 +197,7 @@ def serve_bam(browser=None):
     Ref = request.args.get("Ref")
     filename = f"variant_{Chrom}_{Pos}"
 
-    bam_file = serverpath / "bam" / f"{filename}.calmd.bam"
+    bam_file = ensure_current_bam_dir(serverpath) / f"{filename}.calmd.bam"
     if not bam_file.exists():
         processed_bam(serverpath, Chrom, Pos, Ref)
 
@@ -518,12 +451,16 @@ def load_default_presets():
 
 @app.route("/")
 @app.route("/<path:browser>")
-@app.route("/<path:browser>/")
 def index(browser=None):
+    # A single catch-all rule: registering "/<path:browser>/" as well makes
+    # Werkzeug redirect every file URL (e.g. ".../interactive_variants.html")
+    # to a trailing-slash version, which breaks the page's relative URLs.
     serverpath = DATA_DIR if browser is None else DATA_DIR / browser
 
     if serverpath.is_dir():
         if browser is not None and not request.path.endswith("/"):
+            # Directory URLs need the trailing slash so that config.js and the
+            # /api/... calls resolve relative to the instance.
             print("redirecting: ", DATA_DIR, request.path, flush=True)
             return redirect(request.path + "/", code=308)
 

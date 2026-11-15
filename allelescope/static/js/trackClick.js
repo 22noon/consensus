@@ -16,47 +16,62 @@ function handleTrackClick(track, popoverData) {
     }
 }
 
+/*
+ * Click on a variant glyph in the Variants track: select the matching row of
+ * the variant table (which loads its reads), or just move there if the
+ * variant is not in the table. IGV's own pop-up with the VCF record is still
+ * shown.
+ */
 function _handleVariantTrackClick(popoverData) {
     let variantPos = null;
     let variantChr = null;
 
     for (let data of popoverData) {
         if (data.name && data.value) {
-            if (data.name === 'Pos') variantPos = parseInt(data.value);
-            if (data.name === 'Chr') variantChr = data.value;
+            // IGV formats the position with thousands separators ("2,450")
+            if (data.name === 'Pos') variantPos = parseInt(String(data.value).replace(/[^0-9]/g, ''), 10);
+            if (data.name === 'Chr') variantChr = String(data.value);
         }
     }
 
     console.log("Extracted - Chr:", variantChr, "Pos:", variantPos);
     if (!variantPos) return;
 
-    const matchingVariant = AppState.variants.find(v => v.pos === variantPos);
+    const matchingVariant = AppState.variants.find(v =>
+        v.pos === variantPos && (!variantChr || v.chrom === variantChr)
+    );
+    const row = matchingVariant ? findVariantRow(matchingVariant) : null;
 
-    if (matchingVariant) {
-        console.log("Found matching variant:", matchingVariant);
-
-        // Highlight matching row in the table
-        const rows = document.getElementById('variant-tbody').rows;
-        for (let i = 0; i < rows.length; i++) {
-            const row    = rows[i];
-            const rowPos = parseInt(row.cells[0].textContent);
-            if (rowPos === variantPos) {
-                if (AppState.selectedRow) AppState.selectedRow.classList.remove('selected');
-                row.classList.add('selected');
-                AppState.selectedRow = row;
-                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                break;
-            }
-        }
-
-        const flankSize = parseInt(document.getElementById('flank-size').value) || 100;
-        navigateToVariant(matchingVariant, flankSize);
-    } else {
-        console.log("No matching variant found");
-        if (variantChr && variantPos) {
-            AppState.browser.search(`${variantChr}:${variantPos}`);
-        }
+    if (!row) {
+        console.log("Variant is not in the table");
+        if (variantChr) AppState.browser.search(`${variantChr}:${variantPos}`);
+        return;
     }
+
+    // Already showing this variant: nothing to reload.
+    const current = AppState.currentVariant;
+    if (current && current.chrom === matchingVariant.chrom && current.pos === matchingVariant.pos &&
+        row.classList.contains('selected')) {
+        return;
+    }
+
+    const tab = document.getElementById(`tab-${matchingVariant.chrom}`);
+    if (tab && !tab.classList.contains('active')) {
+        bootstrap.Tab.getOrCreateInstance(tab).show();
+    }
+    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    selectVariantRow(row, matchingVariant);
+}
+
+/* The table row for a variant, or null. Each sequence has its own tab pane
+ * whose id is the sequence name. */
+function findVariantRow(variant) {
+    const pane = document.getElementById(variant.chrom);
+    if (!pane) return null;
+    for (const row of pane.querySelectorAll('tbody tr')) {
+        if (parseInt(row.cells[0].textContent, 10) === variant.pos) return row;
+    }
+    return null;
 }
 
 function _handleAlignmentTrackClick(popoverData) {

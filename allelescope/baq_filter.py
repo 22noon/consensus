@@ -12,6 +12,49 @@ def _baq_at_qpos(qual_list, bq_str, qpos):
     return max(0, int(qual_list[qpos]) - off)
 
 
+def baq_at_site(read, pos0, window=2):
+    """
+    BAQ-adjusted base quality of ``read`` at the 0-based reference position
+    ``pos0``, or None if the read does not cover it.
+
+    Uses the BQ tag written by ``samtools calmd -r`` (BAQ_i = QUAL_i - (BQ_i - 64));
+    a read without a BQ tag is taken at its plain base quality. If the read has
+    no base at the site (deletion or reference skip), the median over its
+    aligned bases within ``window`` bp of the site is used instead.
+    """
+    if read.is_unmapped or read.reference_start is None or read.reference_end is None:
+        return None
+    if not (read.reference_start <= pos0 < read.reference_end):
+        return None
+    quals = read.query_qualities
+    if quals is None:
+        return None
+    bq = read.get_tag("BQ") if read.has_tag("BQ") else None
+
+    def value(qpos):
+        if bq is not None and qpos < len(bq):
+            return _baq_at_qpos(quals, bq, qpos)
+        return int(quals[qpos])
+
+    centre = None
+    flanks = []
+    for qpos, rpos in read.get_aligned_pairs(matches_only=True):
+        if rpos < pos0 - window:
+            continue
+        if rpos > pos0 + window:
+            break
+        if rpos == pos0:
+            centre = value(qpos)
+        else:
+            flanks.append(value(qpos))
+
+    if centre is not None:
+        return centre
+    if flanks:
+        return statistics.median(flanks)
+    return None
+
+
 def make_key(aln):
     """Key that uniquely identifies an alignment record across passes."""
     return (

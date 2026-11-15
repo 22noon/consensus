@@ -82,9 +82,9 @@ function createPresetToolbar(dataGetter, onLoad) {
 
         // Reset variant list tracker and update AppState
         AppState.VariantList = {};
-        AppState.variants = presets[name].data;
-        localStorage.setItem("persistent_variants", JSON.stringify(AppState.variants));
-        onLoad(presets[name].data);
+        recordVariantListLoaded(presets[name].data);
+        AppState.variants = applyVariantEdits(VARIANTS_DATA, AppState.variantEdits);
+        onLoad(AppState.variants);
     };
 
     // DELETE
@@ -144,9 +144,6 @@ function enforceMutualExclusion(el) {
 
         if (other && other.checked) {
             other.checked = false;
-            if (other.id === "filter-softclips" || other.id === "retain-softclips") {
-                syncSoftClipQuickFilter(other);
-            }
             alert("This filter is mutually exclusive with its complement. The other filter has been unchecked.");
 
             // Update state immediately
@@ -174,7 +171,6 @@ function bindEvents() {
         el.addEventListener("input", debounceApply);
 
     });
-    initSoftClipQuickFilters();
     // Trap mouse events on the IGV div for read selection (Shift+Click)
     const igvDiv = document.getElementById('igv-div');
     igvDiv.addEventListener('mousedown', e => {
@@ -263,16 +259,10 @@ function initializeUIEventListeners() {
  */
 console.log("Initializing Interactive Variant Viewer...");
 
-// Load persistent variants if they exist
-const savedVariants = localStorage.getItem("persistent_variants");
-if (savedVariants) {
-    try {
-        AppState.variants = JSON.parse(savedVariants);
-        console.log("Loaded variants from localStorage");
-    } catch (e) {
-        console.warn("Failed to load saved variants:", e);
-    }
-}
+// Apply the remembered edits (added positions, removed rows) to this
+// instance's own variants.
+AppState.variantEdits = loadVariantEdits();
+AppState.variants = applyVariantEdits(VARIANTS_DATA, AppState.variantEdits);
 
 // Load default presets from /filters/filters.json
 fetch(`${AppState.API_BASE}/api/load_default_presets`)
