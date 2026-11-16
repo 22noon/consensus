@@ -77,14 +77,20 @@ function createPresetToolbar(dataGetter, onLoad) {
     loadBtn.onclick = () => {
         const name = select.value;
         if (!name) return;
-        alert(`Loading preset "${name}". This will overwrite your current view.`);
-        console.log("Loading preset data:", presets[name].data);
+        const previousEdits = JSON.parse(JSON.stringify(AppState.variantEdits));
 
         // Reset variant list tracker and update AppState
         AppState.VariantList = {};
         recordVariantListLoaded(presets[name].data);
         AppState.variants = applyVariantEdits(VARIANTS_DATA, AppState.variantEdits);
         onLoad(AppState.variants);
+        showToast(`Loaded variant list "${name}"`, { action: { label: "Undo", onClick: () => {
+            AppState.VariantList = {};
+            AppState.variantEdits = previousEdits;
+            saveVariantEdits(previousEdits);
+            AppState.variants = applyVariantEdits(VARIANTS_DATA, AppState.variantEdits);
+            onLoad(AppState.variants);
+        } } });
     };
 
     // DELETE
@@ -92,11 +98,15 @@ function createPresetToolbar(dataGetter, onLoad) {
         const name = select.value;
         if (!name) return;
 
-        if (!confirm(`Delete preset "${name}"?`)) return;
-
+        const saved = presets[name];
         delete presets[name];
         localStorage.setItem("variantPresets", JSON.stringify(presets));
         refreshOptions();
+        showToast(`Deleted variant list "${name}"`, { action: { label: "Undo", onClick: () => {
+            presets[name] = saved;
+            localStorage.setItem("variantPresets", JSON.stringify(presets));
+            refreshOptions();
+        } } });
     };
 }
 
@@ -186,71 +196,6 @@ function bindEvents() {
         });
 
 
-}
-
-
-function initializeUIEventListeners() {
-
-    // Manual jump input (Enter key)
-    const manualInput = document.getElementById("manual-position-input");
-    if (manualInput) {
-        manualInput.addEventListener("keydown", function (e) {
-            if (e.key === "Enter") addManualVariantRow();
-        });
-    }
-
-    // Spanning reads toggle (KEEP as-is — custom logic)
-    const spanningToggle = document.getElementById('show-spanning');
-    if (spanningToggle) {
-        spanningToggle.addEventListener('change', function () {
-
-            if (!this.checked && AppState.spanningTrackLoaded) {
-                const tracks = AppState.browser.trackViews;
-
-                for (let i = tracks.length - 1; i >= 0; i--) {
-                    if (tracks[i].track.name === "Spanning Reads Only") {
-                        AppState.browser.removeTrack(tracks[i].track);
-                        AppState.spanningTrackLoaded = false;
-                        break;
-                    }
-                }
-
-            } else if (this.checked && AppState.currentVariant && !AppState.spanningTrackLoaded) {
-                const flankSize = parseInt(document.getElementById('flank-size')?.value) || 100;
-                navigateToVariant(AppState.currentVariant, flankSize);
-            }
-        });
-    }
-
-    // IGV mouse interaction (KEEP)
-    const igvDiv = document.getElementById('igv-div');
-    if (igvDiv) {
-
-        igvDiv.addEventListener('mousedown', e => {
-            AppState.lastMouseEvent = e;
-        });
-
-        igvDiv.addEventListener('contextmenu', e => {
-            e.preventDefault();
-        });
-    }
-    const infoCell = row.querySelector(".editable-info");
-
-    infoCell.addEventListener("blur", () => {
-        const newValue = infoCell.textContent.trim();
-
-        // update the underlying data object
-        v.info = newValue;
-
-        // if this row is currently selected, update global state
-        if (row.classList.contains("selected")) {
-            window.selectedVariant.info = newValue;
-        }
-    });
-    infoCell.addEventListener("click", (e) => {
-        alert("You can edit this field to add custom notes or annotations for this variant. Click outside the cell when done.");
-        e.stopPropagation();
-    });
 }
 
 

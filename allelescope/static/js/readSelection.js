@@ -78,12 +78,19 @@ function removeRead(readName) {
 }
 
 function clearReadList() {
-    if (AppState.selectedReads.size === 0 || confirm('Clear all selected reads?')) {
-        AppState.selectedReads.clear();
-        AppState.Token = "";
+    if (AppState.selectedReads.size === 0) return;
+    const saved = new Set(AppState.selectedReads);
+    const savedToken = AppState.Token;
+    AppState.selectedReads.clear();
+    AppState.Token = "";
+    updateReadList();
+    refreshCurrentView();
+    showToast(`Cleared ${saved.size} selected read(s)`, { action: { label: "Undo", onClick: () => {
+        saved.forEach(r => AppState.selectedReads.add(r));
+        AppState.Token = savedToken;
         updateReadList();
         refreshCurrentView();
-    }
+    } } });
 }
 
 function searchForRead(readName) {
@@ -91,7 +98,7 @@ function searchForRead(readName) {
     if (AppState.browser && AppState.browser.search) {
         AppState.browser.search(readName);
     } else {
-        alert(`Read name copied: ${readName}\nUse IGV's search box to find this read.`);
+        showToast(`Use IGV's search box to find ${readName}`);
     }
 }
 
