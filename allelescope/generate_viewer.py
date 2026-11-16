@@ -21,6 +21,39 @@ bam_path = args.bam_path
 vcf_path = args.vcf_path
 output_dir = Path(args.output_dir)
 
+def vcf_allele_fraction(record):
+    """
+    Allele fraction of the (first) ALT allele, or None: from INFO/AF, else the
+    first sample's FORMAT/AF (or VAF), else from its FORMAT/AD.
+    """
+    def first(value):
+        if isinstance(value, (tuple, list)):
+            value = value[0] if value else None
+        try:
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    if "AF" in record.header.info and "AF" in record.info:
+        af = first(record.info["AF"])
+        if af is not None:
+            return af
+    if record.samples:
+        sample = record.samples[0]
+        for key in ("AF", "VAF"):
+            if key in record.header.formats and key in sample:
+                af = first(sample[key])
+                if af is not None:
+                    return af
+        if "AD" in record.header.formats and "AD" in sample:
+            ad = sample["AD"]
+            if ad and len(ad) > 1 and all(x is not None for x in ad):
+                total = sum(ad)
+                if total > 0:
+                    return ad[1] / total
+    return None
+
+
 def read_variants_from_vcf(vcf_path, sequences):
     """Extract variants from VCF file"""
     variants = []
@@ -35,7 +68,8 @@ def read_variants_from_vcf(vcf_path, sequences):
                 'pos': record.pos,
                 'ref': record.ref,
                 'alt': ','.join([str(a) for a in record.alts]) if record.alts else '',
-                'info': f"DP={record.info.get('DP', 'N/A') if 'DP' in record.header.info else 'N/A'}"
+                'info': f"DP={record.info.get('DP', 'N/A') if 'DP' in record.header.info else 'N/A'}",
+                'af': vcf_allele_fraction(record),
             })
         
         vcf.close()

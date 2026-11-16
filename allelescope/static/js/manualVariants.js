@@ -25,7 +25,7 @@ function addManualVariantRow() {
 
         // Prevent duplicate
         if (AppState.manualVariants[chrom].has(pos) || AppState.VariantList[chrom].has(pos)) {
-            alert(`Position ${chrom}:${pos} is already in the variant list.`);
+            showToast(`${chrom}:${pos} is already in the variant list`);
             input.value = "";
             return;
         }
@@ -39,23 +39,13 @@ function addManualVariantRow() {
         AppState.variants.push(v);
         recordVariantAdded(v);
 
-        const row = document.createElement("tr");
-        row.classList.add("manual-row");
-        row.innerHTML = `
-            <td>${v.pos}</td>
-            <td>${v.ref}</td>
-            <td>${v.alt}</td>
-            <td class="text-muted small editable-info" contenteditable="true">
-                ${v.info || ""}
-            </td>
-        `;
+        const row = createVariantRow(v);
 
         fetchAlleles(alleleSite(v)).then(alleles => {
             if (alleles === null) {
-                alert('Unable to extract reads for this position. Is this out of range?');
+                showToast(`Could not read ${chrom}:${pos}. Is it beyond the end of the sequence?`, { kind: "danger" });
                 return;
             }
-            attachRowClickHandler(row, v);
             insertRowSorted(tbody, row, pos);
             selectVariantRow(row, v, alleles);
         });

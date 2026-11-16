@@ -13,6 +13,7 @@ import pysam
 import sys
 import re
 import hashlib
+import threading
 import json
 from pathlib import Path
 
@@ -116,8 +117,25 @@ def build_cache_key(*args):
     print(f"Cache key: {key}")
     return hashlib.md5(key).hexdigest()
 
+# IGV asks for a BAM and its index at the same time, and quick filter changes
+# repeat requests, so one cached file can be requested by several threads at
+# once. Each cache entry is built under its own lock, into temporary files
+# that are renamed into place when complete.
+_cache_locks = {}
+_cache_locks_guard = threading.Lock()
+
+
+def _cache_lock(key):
+    with _cache_locks_guard:
+        return _cache_locks.setdefault(key, threading.Lock())
+
+
 def processed_bam(serverpath, Chrom, Pos, Ref, sample=None):
-    return process_variant(serverpath, Chrom, Pos, Ref, sample=sample)
+    # One preparation per site at a time; a second request waits and then
+    # finds the site prepared.
+    key = f"site|{Path(serverpath).resolve()}|{Chrom}|{Pos}|{site_sample(sample)}"
+    with _cache_lock(key):
+        return process_variant(serverpath, Chrom, Pos, Ref, sample=sample)
 
 
 def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
@@ -141,11 +159,22 @@ def build_filtered_bam(serverpath, cache_dir, filename, cache_key, params):
     if bam_path.exists() and bai_path.exists():
         return bam_path
 
-    header, reads = get_filtered_reads_bam(serverpath, filename, **params)
-    with pysam.AlignmentFile(str(bam_path), "wb", header=header) as out:
-        for read in reads:
-            out.write(read)
-    pysam.index(str(bam_path))
+    with _cache_lock(str(bam_path)):
+        if bam_path.exists() and bai_path.exists():
+            return bam_path
+        tmp_bam = cache_dir / f"{cache_key}.{threading.get_ident()}.tmp.bam"
+        tmp_bai = Path(f"{tmp_bam}.bai")
+        try:
+            header, reads = get_filtered_reads_bam(serverpath, filename, **params)
+            with pysam.AlignmentFile(str(tmp_bam), "wb", header=header) as out:
+                for read in reads:
+                    out.write(read)
+            pysam.index(str(tmp_bam), str(tmp_bai))
+            tmp_bam.replace(bam_path)
+            tmp_bai.replace(bai_path)
+        finally:
+            tmp_bam.unlink(missing_ok=True)
+            tmp_bai.unlink(missing_ok=True)
     return bam_path
 
 
@@ -387,18 +416,84 @@ def extract_bam(browser=None):
                 count = int(count)
                 pct = round(float(pct)*100, 2)
 
-                mock_alleles.append({
+                allele = {
                     "xa": xa,
                     "xd": 0,
                     "xn": 0,
                     "count": count,
                     "pct": pct,
                     "type": allele_type,
-                })
+                }
+                if len(fields) >= 8:
+                    allele["fwd"] = int(fields[4])
+                    allele["rev"] = int(fields[5])
+                    allele["bq"] = float(fields[6]) if fields[6] else None
+                    allele["mq"] = float(fields[7]) if fields[7] else None
+                mock_alleles.append(allele)
 
         return jsonify({"success": True, "alleles": mock_alleles,
                         "sampling": read_site_info(serverpath, Chrom, Pos, Sample)})
     return jsonify({"success": False}), 500
+
+
+def _vcf_text(value: str) -> str:
+    """Percent-encode the characters a VCF INFO value cannot hold."""
+    out = []
+    for ch in value:
+        if ch in "%;=,:" or ch in "\t\r\n" or ch == " ":
+            out.append(f"%{ord(ch):02X}")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def instance_vcf(serverpath: Path):
+    """The VCF an instance was built from (the bgzipped copy in its folder)."""
+    candidates = sorted(p for p in Path(serverpath).glob("*.vcf.gz")
+                        if not p.name.endswith(".reviewed.vcf.gz"))
+    return candidates[0] if candidates else None
+
+
+@app.route("/api/review_vcf", methods=["POST"])
+@app.route("/<path:browser>/api/review_vcf", methods=["POST"])
+def review_vcf(browser=None):
+    """
+    The instance's VCF with the browser's review added to each record:
+        INFO/REVIEW       confirmed | doubtful | artefact
+        INFO/REVIEW_NOTE  the note, percent-encoded (%3B for ";", %20 for space ...)
+    Body: {"reviews": {"chrom:pos": {"s": status, "n": note}, ...}}
+    """
+    serverpath = DATA_DIR if browser is None else DATA_DIR / browser
+    src = instance_vcf(serverpath)
+    if src is None:
+        return jsonify({"error": "This instance has no VCF"}), 404
+    reviews = (request.get_json(silent=True) or {}).get("reviews") or {}
+
+    with pysam.VariantFile(str(src)) as vin:
+        header = vin.header.copy()
+        if "REVIEW" not in header.info:
+            header.add_meta("INFO", items=[("ID", "REVIEW"), ("Number", "1"), ("Type", "String"),
+                                           ("Description", "Allelescope review: confirmed, doubtful or artefact")])
+        if "REVIEW_NOTE" not in header.info:
+            header.add_meta("INFO", items=[("ID", "REVIEW_NOTE"), ("Number", "1"), ("Type", "String"),
+                                           ("Description", "Allelescope review note (percent-encoded)")])
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = Path(tmp) / "reviewed.vcf"
+            with pysam.VariantFile(str(out_path), "w", header=header) as vout:
+                for rec in vin:
+                    rec.translate(vout.header)
+                    r = reviews.get(f"{rec.chrom}:{rec.pos}") or {}
+                    status = r.get("s")
+                    note = (r.get("n") or "").strip()
+                    if status in ("confirmed", "doubtful", "artefact"):
+                        rec.info["REVIEW"] = status
+                    if note:
+                        rec.info["REVIEW_NOTE"] = _vcf_text(note)
+                    vout.write(rec)
+            data = out_path.read_bytes()
+
+    name = src.name[:-len(".vcf.gz")] + ".reviewed.vcf"
+    return send_file(io.BytesIO(data), mimetype="text/plain", as_attachment=True, download_name=name)
 
 
 @app.route("/api/depth")

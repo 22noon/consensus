@@ -295,6 +295,28 @@ def _reference_base(ref_fasta, chrom, pos0):
     return base if len(base) == 1 and base in "ACGTN" else None
 
 
+def _base_quality_at(read, target_pos):
+    """Base quality of the read at reference position target_pos (0-based),
+    or None where the read has no base there (deletion, skip)."""
+    quals = read.query_qualities
+    if quals is None:
+        return None
+    qpos, rpos = 0, read.reference_start
+    for op, length in read.cigartuples or ():
+        if op in (0, 7, 8):
+            if rpos <= target_pos < rpos + length:
+                return quals[qpos + target_pos - rpos]
+            qpos += length
+            rpos += length
+        elif op in (1, 4):
+            qpos += length
+        elif op in (2, 3):
+            if rpos <= target_pos < rpos + length:
+                return None
+            rpos += length
+    return None
+
+
 def _name_rank(qname: str) -> bytes:
     """Fixed pseudo-random sort key for a read name (same on every run)."""
     return hashlib.blake2b(qname.encode("utf-8", "surrogateescape"), digest_size=8,
@@ -335,6 +357,7 @@ def extract_mates(
     ref_fasta: str = None,
     max_pairs: int = None,
     sample_info: dict = None,
+    allele_stats: dict = None,
 ) -> defaultdict:
     """
     Extract overlapping reads and their mates for a genomic region.
@@ -369,6 +392,9 @@ def extract_mates(
                    counts still use every read. None keeps everything.
         sample_info: optional dict, filled with "pairs_total" and
                    "pairs_kept".
+        allele_stats: optional dict, filled per allele with
+                   {"fwd", "rev", "bq_sum", "bq_n", "mq_sum"} over the same
+                   reads as the allele counts (one read per fragment).
         ref_fasta: indexed reference FASTA. Used to look up the reference
                    base at the site once; without it each read's MD tag
                    is parsed instead.
@@ -459,7 +485,7 @@ def extract_mates(
             if read.reference_start <= target_pos < read.reference_end:
                 covering[read.query_name].append(
                     (read.is_supplementary, read.reference_start,
-                     get_allele_at_base(read, target_pos, site_ref_base))
+                     get_allele_at_base(read, target_pos, site_ref_base), read)
                 )
             continue
 
@@ -477,7 +503,7 @@ def extract_mates(
         # where both split segments independently cover target_pos).
         if read.reference_start <= target_pos < read.reference_end:
             covering[read.query_name].append(
-                (read.is_supplementary, read.reference_start, allele)
+                (read.is_supplementary, read.reference_start, allele, read)
             )
 
         read.set_tag("XA", allele,      value_type="Z")
@@ -506,9 +532,17 @@ def extract_mates(
     # Preference order: non-supplementary (primary) alignment first; among
     # remaining ties, leftmost reference_start. Independent of fetch order.
     for qname, candidates in covering.items():
-        _, _, allele = min(candidates, key=lambda c: (c[0], c[1]))
+        _, _, allele, chosen = min(candidates, key=lambda c: (c[0], c[1]))
         allele_counts[allele] += 1
         XA_dict[qname] = allele
+        if allele_stats is not None:
+            st = allele_stats.setdefault(allele, {"fwd": 0, "rev": 0, "bq_sum": 0, "bq_n": 0, "mq_sum": 0})
+            st["rev" if chosen.is_reverse else "fwd"] += 1
+            st["mq_sum"] += chosen.mapping_quality
+            bq = _base_quality_at(chosen, target_pos)
+            if bq is not None:
+                st["bq_sum"] += bq
+                st["bq_n"] += 1
 
     # ---- Build the set of "other alignments" that still need fetching ----
     # Anything whose target (chrom, pos) matches an already-written record
@@ -581,8 +615,13 @@ def extract_mates(
     return allele_counts
 
 
-def _write_indel_stats(allele_counts: defaultdict, out_bam: str) -> None:
-    """Write indel statistics file alongside the output BAM."""
+def _write_indel_stats(allele_counts: defaultdict, out_bam: str, allele_stats: dict = None) -> None:
+    """
+    Write the allele table alongside the output BAM, one allele per line:
+        allele  count  fraction  type  [fwd  rev  mean_BQ  mean_MAPQ]
+    The bracketed columns are written when allele_stats is given; mean_BQ is
+    empty for alleles without a base at the site (deletions).
+    """
     indelstat_output = f"{out_bam}.indelstats.txt"
     total = sum(allele_counts.values())
     with open(indelstat_output, 'w', encoding='utf-8') as f:
@@ -592,7 +631,13 @@ def _write_indel_stats(allele_counts: defaultdict, out_bam: str) -> None:
             elif allele[0] == 'I': allele_type = 'ins'
             elif allele[0] == 'M': allele_type = 'snp'
             else:                  allele_type = 'other'
-            f.write(f"{allele}\t{count}\t{count/total:.4f}\t{allele_type}\n")
+            line = f"{allele}\t{count}\t{count/total:.4f}\t{allele_type}"
+            if allele_stats is not None and allele in allele_stats:
+                st = allele_stats[allele]
+                bq = f"{st['bq_sum'] / st['bq_n']:.1f}" if st["bq_n"] else ""
+                mq = f"{st['mq_sum'] / max(1, st['fwd'] + st['rev']):.1f}"
+                line += f"\t{st['fwd']}\t{st['rev']}\t{bq}\t{mq}"
+            f.write(line + "\n")
 
 
 if __name__ == "__main__":
