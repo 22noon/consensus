@@ -3,7 +3,11 @@
 }
 
 .show-empty .tab-empty {
-    display: block;
+    display: flex;
+}
+
+#chromTabs:not(.show-empty) .nav-item:has(> .tab-empty) {
+    display: none;
 }
 
 .allele-row-hidden {
@@ -245,3 +249,198 @@ table {
 .dropdown-menu {
     z-index: 2000; /* higher than IGV */
 }
+/* Subsampling prompt for deep sites (sampling.js) */
+.sampling-overlay {
+    position: fixed; inset: 0; z-index: 2000;
+    background: rgba(0, 0, 0, 0.35);
+    display: flex; align-items: center; justify-content: center;
+}
+.sampling-card { width: min(28rem, 92vw); }
+/* ── Sequence list layouts (tabs.js: applyTabLayout) ── */
+#chromTabs .nav-link {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3em;
+}
+.chrom-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+.chrom-count {
+    flex-shrink: 0;
+}
+#chromFilter,
+#chromSelect {
+    display: none;
+}
+.chrom-filtered {
+    display: none !important;
+}
+
+/* Tabs down the side */
+.chrom-layout[data-mode="vertical"] {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+}
+.chrom-layout[data-mode="vertical"] .chrom-nav {
+    flex: 0 0 auto;
+    width: max-content;
+    min-width: 6rem;
+    max-width: 40%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+.chrom-layout[data-mode="vertical"].with-filter #chromFilter {
+    display: block;
+}
+.chrom-layout[data-mode="vertical"] #chromTabs {
+    flex-wrap: nowrap;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 350px;          /* same as the variant table */
+    white-space: normal;
+    border-right: 1px solid #dee2e6;
+    padding-right: 0.35rem;
+    gap: 2px;
+}
+.chrom-layout[data-mode="vertical"] #chromTabs .nav-link {
+    justify-content: space-between;
+    text-align: left;
+    width: 100%;
+    padding: 0.3rem 0.55rem;
+    font-size: 0.85rem;
+}
+.chrom-layout[data-mode="vertical"] #chromTabs .nav-link:not(.active) {
+    color: var(--bs-body-color);
+}
+.chrom-layout[data-mode="vertical"] #chromTabs .nav-link:not(.active):hover {
+    background: #e9ecef;
+}
+.chrom-layout[data-mode="vertical"] #chromTabs .nav-link:not(.active) .chrom-count {
+    color: var(--bs-secondary-color);
+}
+.chrom-layout[data-mode="vertical"] #chromTabContent {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: 0 !important;
+}
+
+/* Drop-down list */
+.chrom-layout[data-mode="dropdown"] #chromSelect {
+    display: block;
+}
+.chrom-layout[data-mode="dropdown"] #chromTabs {
+    display: none;
+}
+.chrom-layout[data-mode="dropdown"] #chromTabContent {
+    margin-top: 0.5rem !important;
+}
+
+/* Allele panel rows (alleleFilter.js) */
+.allele-row { cursor: pointer; }
+.allele-row:hover { background: #f1f5f9; }
+.allele-row-active { background: #dbeafe; }
+.allele-row-hidden { display: none !important; }
+.allele-stats { padding-left: 1.75rem; font-size: 0.75rem; }
+
+/* Toasts and dialogs (ui.js) */
+.app-toasts {
+    position: fixed; right: 1rem; bottom: 1rem; z-index: 2100;
+    display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end;
+}
+.app-toast {
+    display: flex; align-items: center;
+    max-width: 26rem; padding: 0.45rem 0.6rem 0.45rem 0.85rem;
+    border-radius: 0.4rem; font-size: 0.85rem; color: #fff;
+    background: rgba(33, 37, 41, 0.94); box-shadow: 0 4px 14px rgba(0,0,0,.2);
+    transition: opacity .2s ease, transform .2s ease;
+}
+.app-toast-danger { background: rgba(176, 42, 55, 0.95); }
+.app-toast-leaving { opacity: 0; transform: translateY(6px); }
+.app-overlay {
+    position: fixed; inset: 0; z-index: 2050; background: rgba(0,0,0,.35);
+    display: flex; align-items: center; justify-content: center;
+}
+.app-dialog { width: min(26rem, 92vw); }
+
+/* Variant table (tabs.js) and review (review.js) */
+.variant-table th, .variant-table td { padding: 0.3rem 0.35rem; }
+.variant-table .col-status { width: 1.6rem; text-align: center; padding-left: 0.15rem; padding-right: 0.15rem; }
+.variant-table .col-del { width: 1.6rem; text-align: center; padding: 0; }
+.variant-table .col-af { white-space: nowrap; }
+.variant-table th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.variant-table th.sortable:hover { text-decoration: underline; }
+.variant-table th.sorted-asc::after { content: " ▲"; font-size: 0.65em; }
+.variant-table th.sorted-desc::after { content: " ▼"; font-size: 0.65em; }
+.allele-text {
+    display: inline-block; max-width: 5.5em; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
+}
+.variant-table .editable-info { max-width: 9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.variant-table .editable-info[contenteditable="true"] {
+    white-space: normal; outline: 2px solid #86b7fe; background: #fff; cursor: text;
+}
+.variant-table .editable-info:empty::before { content: attr(data-placeholder); color: #c0c4c8; font-style: italic; }
+.variant-row-hidden { display: none; }
+.row-delete {
+    border: 0; background: none; color: #adb5bd; padding: 0.1rem 0.3rem; line-height: 1;
+    opacity: 0; transition: opacity 0.1s;
+}
+tr.variant-row:hover .row-delete, tr.variant-row.selected .row-delete, .row-delete:focus { opacity: 1; }
+.row-delete:hover { color: #dc3545; }
+.status-dot { border: 0; background: none; padding: 0; line-height: 1; font-size: 1rem; }
+.status-menu {
+    position: absolute; z-index: 2100; background: #fff; border: 1px solid #dee2e6;
+    border-radius: 0.35rem; padding: 0.25rem; display: flex; flex-direction: column; min-width: 11rem;
+}
+.status-menu button {
+    border: 0; background: none; text-align: left; padding: 0.3rem 0.5rem; font-size: 0.85rem;
+    display: flex; align-items: center; gap: 0.4rem; border-radius: 0.25rem;
+}
+.status-menu button:hover { background: #f1f3f5; }
+.status-menu kbd { margin-left: auto; font-size: 0.7rem; }
+.shortcut-help {
+    position: fixed; right: 1rem; top: 5rem; z-index: 2000; width: 22rem;
+}
+.shortcut-help kbd { font-size: 0.75rem; }
+
+/* Flags and read types: three-way switches (filters.js) */
+.tri-state .btn { padding: 0.05rem 0.45rem; font-size: 0.75rem; }
+.tri-state .btn-check:checked + .btn-outline-secondary {
+    background: #f1f3f5; color: #6c757d; border-color: #ced4da;
+}
+.tri-row + .tri-row { border-top: 1px solid #f1f3f5; }
+
+/* Key to read colours (ui.js) */
+.colour-key { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.6rem; margin: 0.25rem 0 0.35rem; font-size: 0.75rem; }
+.colour-key .key-item { display: inline-flex; align-items: center; gap: 0.25rem; }
+.colour-key .key-swatch { display: inline-block; width: 0.75rem; height: 0.6rem; border-radius: 2px; }
+.colour-key .key-line { display: inline-block; width: 0.9rem; height: 2px; background: #000; }
+.colour-key .key-sep { color: #ced4da; }
+
+/* Read selection bar above IGV (ui.js) */
+#read-selection-card .card-body {
+    display: grid; grid-template-columns: auto minmax(10rem, 1fr) auto;
+    gap: 0.25rem 0.5rem; align-items: center; padding: 0.35rem 0.5rem !important;
+}
+#read-selection-card h6 { margin: 0 !important; font-size: 0.85rem; white-space: nowrap; }
+#read-selection-card .input-group, #read-selection-card .d-flex { margin: 0 !important; }
+#read-selection-card #highlighted-reads-list { grid-column: 1 / -1; }
+#read-selection-card #highlighted-reads-list:empty { display: none; }
+#read-selection-card #highlighted-reads-list {
+    max-height: none !important; display: flex; flex-wrap: wrap; align-items: center;
+    gap: 0.35rem 0.6rem; padding: 0.3rem 0.4rem !important;
+}
+#read-selection-card .selected-header { padding: 0; background: none; border: 0; font-size: 0.8rem; }
+#read-selection-card .read-list {
+    display: flex; flex-wrap: wrap; gap: 0.25rem; padding: 0; max-height: 4.2rem; flex: 1 1 12rem;
+}
+#read-selection-card .read-item {
+    border: 0; padding: 0.05rem 0.5rem; background: #e9ecef; border-radius: 1rem; font-size: 0.75rem;
+}
+#read-selection-card .read-action-bar { position: static; padding: 0; background: none; border: 0; gap: 0.35rem; }
+#read-selection-card .read-action-bar .btn { flex: none; border-radius: 0.3rem; padding: 0.1rem 0.5rem; font-size: 0.8rem; }

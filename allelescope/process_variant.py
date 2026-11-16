@@ -1,6 +1,7 @@
 from .extract_mates import extract_mates, _write_indel_stats
 from pathlib import Path
 import hashlib
+import json
 import re
 import threading
 import pysam
@@ -10,7 +11,7 @@ import pysam
 #   2: XO "proper" covers both F1R2 and R1F2 proper pairs
 #   3: XA reference/mismatch decided against the FASTA rather than MD tags;
 #      BQ (BAQ) only on reads that cross the site
-PROCESSING_VERSION = "3"
+PROCESSING_VERSION = "4"
 _VERSION_FILE = ".allelescope_version"
 _checked_dirs = set()
 _check_lock = threading.Lock()
@@ -19,9 +20,19 @@ _check_lock = threading.Lock()
 _UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9._+-]")
 
 
-def site_stem(chrom, pos) -> str:
+def site_sample(value):
+    """Parse a requested sample size: a positive int, or None for all reads."""
+    try:
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
+
+
+def site_stem(chrom, pos, sample=None) -> str:
     """
-    File-name stem for the per-site BAMs of chrom:pos, e.g. "variant_chr1_1200".
+    File-name stem for the per-site BAMs of chrom:pos, e.g. "variant_chr1_1200",
+    or "variant_chr1_1200.s2000" for the version subsampled to 2,000 read pairs.
 
     Sequence names may contain characters that are not allowed in file names
     on Windows (GRCh38 has HLA contigs such as "HLA-A*01:01:01:01") or that
@@ -35,7 +46,21 @@ def site_stem(chrom, pos) -> str:
     if safe != chrom or safe in ("", ".", ".."):
         digest = hashlib.sha1(chrom.encode("utf-8")).hexdigest()[:8]
         safe = f"{safe}-{digest}"
-    return f"variant_{safe}_{int(pos)}"
+    stem = f"variant_{safe}_{int(pos)}"
+    sample = site_sample(sample)
+    return f"{stem}.s{sample}" if sample else stem
+
+
+def site_info_path(serverpath, chrom, pos, sample=None) -> Path:
+    return Path(serverpath) / "bam" / f"{site_stem(chrom, pos, sample)}.site.json"
+
+
+def read_site_info(serverpath, chrom, pos, sample=None) -> dict:
+    """Read-pair counts recorded when the site was prepared ({} if unknown)."""
+    try:
+        return json.loads(site_info_path(serverpath, chrom, pos, sample).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
 
 
 def _calmd(in_bam, ref, out_bam, baq):
@@ -84,6 +109,7 @@ def process_variant(
     window: int = 2,
     primary_only: bool = True,
     add_indel_tags: bool = True,
+    sample=None,
 ) -> int:
     """
     Pure-Python replacement for processed_bam() / extract_bam.sh.
@@ -95,7 +121,8 @@ def process_variant(
     bam_dir  = ensure_current_bam_dir(base)
     Ref      = base / f"{Ref}"
 
-    stem       = site_stem(Chrom, Pos)
+    sample     = site_sample(sample)
+    stem       = site_stem(Chrom, Pos, sample)
     out_bam    = bam_dir / f"{stem}.bam"
     mates_bam  = bam_dir / f"{stem}.mates.bam"
     merged_tmp = bam_dir / f"{stem}.bam.t"
@@ -124,6 +151,8 @@ def process_variant(
     if calmd_bam.exists() and out_bam.exists():
         return 0
 
+    sample_info = {}
+    allele_stats = {}
     allele_counts = extract_mates(
         src_bam   = src_bam,
         out_bam   = str(out_bam),
@@ -132,8 +161,13 @@ def process_variant(
         start     = int(Pos),
         end       = int(Pos),
         ref_fasta = str(Ref),
+        max_pairs = sample,
+        sample_info = sample_info,
+        allele_stats = allele_stats,
     )
-    _write_indel_stats(allele_counts, str(out_bam))
+    _write_indel_stats(allele_counts, str(out_bam), allele_stats)
+    sample_info["sample"] = sample
+    site_info_path(base, Chrom, Pos, sample).write_text(json.dumps(sample_info), encoding="utf-8")
     pysam.index(str(out_bam))
 
     # Recompute MD/NM against the reference for every record (samtools

@@ -143,6 +143,7 @@ function toggleEmptyTabs(showEmpty) {
         const firstVisible = tabsContainer.querySelector(".nav-link:not(.tab-empty)");
         bootstrap?.Tab.getOrCreateInstance(firstVisible)?.show();
     }
+    applyTabLayout();
 }
 
 function initEmptyTabsToggle() {
@@ -155,7 +156,337 @@ function initEmptyTabsToggle() {
 
 document.addEventListener("DOMContentLoaded", initEmptyTabsToggle);
 
-function buildVariantTabs(data) {
+/*
+ * Layout of the sequence (chromosome / segment / contig) list
+ *
+ *   horizontal  tabs in a row (scrolls sideways when there are many)
+ *   vertical    tabs in a column beside the variant table, with a search
+ *               box when the list is long
+ *   dropdown    a single drop-down list
+ *   auto        horizontal while every tab fits in one row, otherwise vertical
+ *
+ * The choice is set in the Variants gear menu and remembered in the browser.
+ * The controls are added here rather than in the page template, so viewers
+ * built earlier get them too.
+ */
+const TAB_LAYOUT_KEY        = "allelescope.tabLayout";
+const TAB_SEARCH_MIN_TABS   = 9;   // vertical list: show the search box from this many tabs
+let   lastAutoLayoutWidth   = 0;
+
+function escapeTabText(text) {
+    return String(text).replace(/[&<>"']/g, c => (
+        { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function getTabLayoutChoice() {
+    try {
+        const v = localStorage.getItem(TAB_LAYOUT_KEY);
+        return ["auto", "horizontal", "vertical", "dropdown"].includes(v) ? v : "auto";
+    } catch (e) {
+        return "auto";
+    }
+}
+
+function setTabLayoutChoice(choice) {
+    try { localStorage.setItem(TAB_LAYOUT_KEY, choice); } catch (e) { /* page-only */ }
+    applyTabLayout();
+}
+
+function ensureTabLayoutControls() {
+    const tabs    = document.getElementById("chromTabs");
+    const content = document.getElementById("chromTabContent");
+    if (!tabs || !content) return null;
+
+    let layout = document.getElementById("chromTabsLayout");
+    if (!layout) {
+        layout = document.createElement("div");
+        layout.id = "chromTabsLayout";
+        layout.className = "chrom-layout";
+        tabs.parentElement.insertBefore(layout, tabs);
+
+        const nav = document.createElement("div");
+        nav.id = "chromNav";
+        nav.className = "chrom-nav";
+        nav.innerHTML = `
+            <input type="search" id="chromFilter" class="form-control form-control-sm"
+                   placeholder="Find sequence" aria-label="Find sequence">
+            <select id="chromSelect" class="form-select form-select-sm"
+                    aria-label="Sequence"></select>`;
+        nav.appendChild(tabs);
+        layout.appendChild(nav);
+        layout.appendChild(content);
+
+        nav.querySelector("#chromFilter").addEventListener("input", filterTabList);
+        nav.querySelector("#chromSelect").addEventListener("change", e => {
+            const btn = document.getElementById(e.target.value);
+            if (btn) bootstrap.Tab.getOrCreateInstance(btn).show();
+        });
+        tabs.addEventListener("shown.bs.tab", syncTabSelect);
+
+        // "auto" depends on the width available: re-check when it changes.
+        if (typeof ResizeObserver === "function") {
+            new ResizeObserver(entries => {
+                const width = Math.round(entries[0].contentRect.width);
+                if (getTabLayoutChoice() === "auto" && width && width !== lastAutoLayoutWidth) {
+                    lastAutoLayoutWidth = width;
+                    applyTabLayout();
+                }
+            }).observe(layout);
+        }
+    }
+
+    // Layout choice in the Variants gear menu, under "Show empty chromosomes".
+    if (!document.getElementById("tab-layout-select")) {
+        const anchor = document.getElementById("toggle-empty-tabs-switch")?.closest(".form-check");
+        if (anchor) {
+            const block = document.createElement("div");
+            block.className = "mb-2";
+            block.innerHTML = `
+                <label for="tab-layout-select" class="form-label small mb-1">Sequence list</label>
+                <select id="tab-layout-select" class="form-select form-select-sm">
+                    <option value="auto">Automatic</option>
+                    <option value="horizontal">Tabs across the top</option>
+                    <option value="vertical">Tabs down the side</option>
+                    <option value="dropdown">Drop-down list</option>
+                </select>`;
+            anchor.after(block);
+            const select = block.querySelector("select");
+            select.value = getTabLayoutChoice();
+            select.addEventListener("change", () => setTabLayoutChoice(select.value));
+            // Keep the menu open while the select is used.
+            block.addEventListener("click", e => e.stopPropagation());
+        }
+    }
+    return layout;
+}
+
+function visibleTabButtons() {
+    const tabs = document.getElementById("chromTabs");
+    if (!tabs) return [];
+    const showEmpty = tabs.classList.contains("show-empty");
+    return [...tabs.querySelectorAll(".nav-link")]
+        .filter(btn => showEmpty || !btn.classList.contains("tab-empty"));
+}
+
+function setTabMode(layout, tabs, mode) {
+    layout.dataset.mode = mode;
+    const vertical = mode === "vertical";
+    tabs.classList.toggle("nav-tabs", !vertical);
+    tabs.classList.toggle("nav-pills", vertical);
+    tabs.classList.toggle("flex-column", vertical);
+}
+
+function applyTabLayout() {
+    const layout = ensureTabLayoutControls();
+    const tabs   = document.getElementById("chromTabs");
+    if (!layout || !tabs) return;
+
+    const buttons = visibleTabButtons();
+    let mode = getTabLayoutChoice();
+    if (mode === "auto") {
+        // Lay the tabs out in a row and see whether they fit.
+        setTabMode(layout, tabs, "horizontal");
+        if (buttons.length <= 1) {
+            mode = "horizontal";
+        } else if (tabs.clientWidth > 0) {
+            mode = tabs.scrollWidth > tabs.clientWidth + 1 ? "vertical" : "horizontal";
+        } else {
+            mode = buttons.length > 4 ? "vertical" : "horizontal";   // pane hidden: guess
+        }
+    }
+    setTabMode(layout, tabs, mode);
+
+    const longList = mode === "vertical" && buttons.length >= TAB_SEARCH_MIN_TABS;
+    layout.classList.toggle("with-filter", longList);
+    if (!longList) {
+        document.getElementById("chromFilter").value = "";
+    }
+    filterTabList();
+
+    const select = document.getElementById("chromSelect");
+    select.innerHTML = buttons.map(btn =>
+        `<option value="${escapeTabText(btn.id)}">${escapeTabText(btn.title)} `
+        + `${escapeTabText(btn.querySelector(".chrom-count")?.textContent || "")}</option>`).join("");
+    syncTabSelect();
+    tabs.querySelector(".nav-link.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function filterTabList() {
+    const input = document.getElementById("chromFilter");
+    const text  = (input?.value || "").trim().toLowerCase();
+    document.querySelectorAll("#chromTabs .nav-item").forEach(li => {
+        const btn = li.querySelector(".nav-link");
+        const match = !text || (btn?.title || "").toLowerCase().includes(text);
+        li.classList.toggle("chrom-filtered", !match);
+    });
+}
+
+function syncTabSelect() {
+    const select = document.getElementById("chromSelect");
+    const active = document.querySelector("#chromTabs .nav-link.active");
+    if (select && active) select.value = active.id;
+}
+
+/*
+ * Variant table rows
+ *
+ *   status | Pos | Ref | Alt | AF | Note | remove
+ *
+ * Status and note come from review.js (remembered per instance). AF is the
+ * VCF's allele fraction, or the fraction observed in the reads (in italics)
+ * once the site has been opened. Removing a row asks nothing; a message
+ * offers to undo it.
+ */
+function createVariantTable() {
+    const table = document.createElement("table");
+    table.className = "table table-sm table-hover align-middle variant-table";
+    table.innerHTML = `
+        <thead class="table-light sticky-top">
+            <tr>
+                <th class="col-status sortable" data-sort="status" title="Review status (sort)">
+                    <i class="bi bi-check2-circle"></i></th>
+                <th class="sortable" data-sort="pos" title="Sort by position">Pos</th>
+                <th>Ref</th><th>Alt</th>
+                <th class="sortable" data-sort="af"
+                    title="Allele fraction from the VCF, or as observed in the reads (in italics) once the site has been opened. Click to sort.">AF</th>
+                <th title="Your note; double-click a cell (or press E) to edit. Hover to see the VCF INFO.">Note</th>
+                <th class="col-del"></th>
+            </tr>
+        </thead>
+        <tbody></tbody>`;
+    table.querySelectorAll("th.sortable").forEach(th =>
+        th.addEventListener("click", () => sortVariantTables(th.dataset.sort)));
+    return table;
+}
+
+function shortAlleleHtml(text) {
+    const t = escapeTabText(text || "");
+    return `<span class="allele-text" title="${t}">${t}</span>`;
+}
+
+/* AF to show for a variant: {text, observed, value} */
+function variantAF(v) {
+    if (typeof v.af === "number" && isFinite(v.af)) {
+        return { value: v.af, text: `${Math.round(v.af * 100)}%`, observed: false };
+    }
+    const site = alleleSite(v);
+    const alleles = (AppState.siteAlleles || {})[siteKey(site)];
+    if (alleles && alleles.length) {
+        const expected = expectedAltAlleles(v);
+        let pct = 0;
+        if (expected.size) {
+            alleles.forEach(a => { if (expected.has(a.xa)) pct += a.pct; });
+        } else {
+            alleles.forEach(a => { if (a.type !== "ref") pct += a.pct; });
+        }
+        return { value: pct / 100, text: `${Math.round(pct)}%`, observed: true };
+    }
+    return { value: -1, text: "–", observed: false };
+}
+
+function fillVariantRow(row, v) {
+    const af = variantAF(v);
+    row.dataset.pos = v.pos;
+    row.dataset.af  = af.value;
+    const review = typeof getReview === "function" ? getReview(v) : null;
+    row.dataset.status = review?.s || "";
+
+    const note = review?.n || "";
+    const vcfInfo = v.info && v.info !== "Manual" ? v.info : "";
+    row.innerHTML = `
+        <td class="col-status">${typeof reviewStatusHtml === "function" ? reviewStatusHtml(v) : ""}</td>
+        <td>${v.pos}</td>
+        <td>${shortAlleleHtml(v.ref)}</td>
+        <td>${shortAlleleHtml(v.alt)}</td>
+        <td class="col-af${af.observed ? " fst-italic" : ""}"
+            title="${af.observed ? "Observed in the reads" : af.value >= 0 ? "From the VCF" : "Not known yet: open the site"}">${af.text}</td>
+        <td class="small editable-info${note ? "" : " text-muted"}" title="${escapeTabText(vcfInfo || v.info || "")}"
+            data-placeholder="add note">${escapeTabText(note || (v.info === "Manual" ? "" : vcfInfo))}</td>
+        <td class="col-del">
+            <button type="button" class="row-delete" title="Remove from the list"
+                    aria-label="Remove ${escapeTabText(v.chrom)}:${v.pos}">
+                <i class="bi bi-x-lg"></i></button></td>`;
+
+    row.querySelector(".row-delete").addEventListener("click", e => {
+        e.stopPropagation();
+        removeVariantWithUndo(v);
+    });
+    const noteCell = row.querySelector(".editable-info");
+    noteCell.addEventListener("dblclick", e => {
+        e.stopPropagation();
+        if (typeof editVariantNote === "function") editVariantNote(row, v);
+    });
+}
+
+function createVariantRow(v) {
+    const row = document.createElement("tr");
+    row.className = "variant-row" + (v.info === "Manual" ? " manual-row" : "");
+    row.style.cursor = "pointer";
+    row.dataset.chrom = v.chrom;
+    row._variant = v;
+    fillVariantRow(row, v);
+    row.addEventListener("click", () => selectVariantRow(row, v));
+    return row;
+}
+
+/* Re-render a row in place (keeps selection and listeners on the row). */
+function refreshVariantRow(row) {
+    if (!row || !row._variant) return;
+    fillVariantRow(row, row._variant);
+}
+
+function refreshAllVariantRows() {
+    document.querySelectorAll("#chromTabContent tr.variant-row").forEach(refreshVariantRow);
+}
+
+function removeVariantWithUndo(v) {
+    const before = {
+        variants: AppState.variants.slice(),
+        edits: JSON.parse(JSON.stringify(AppState.variantEdits)),
+    };
+    AppState.variants = AppState.variants.filter(x => !(x.chrom === v.chrom && x.pos === v.pos));
+    if (v.info === "Manual") AppState.manualVariants[v.chrom]?.delete(v.pos);
+    recordVariantRemoved(v);
+    buildVariantTabs(AppState.variants, v.chrom);
+    showToast(`Removed ${v.chrom}:${v.pos}`, {
+        action: {
+            label: "Undo",
+            onClick: () => {
+                AppState.variants = before.variants;
+                AppState.variantEdits = before.edits;
+                saveVariantEdits(before.edits);
+                if (v.info === "Manual") {
+                    (AppState.manualVariants[v.chrom] = AppState.manualVariants[v.chrom] || new Set()).add(v.pos);
+                }
+                buildVariantTabs(AppState.variants, v.chrom);
+            }
+        }
+    });
+}
+
+/* Sort every variant table; the same key again reverses the order. */
+const STATUS_SORT = { "": 0, doubtful: 1, artefact: 2, confirmed: 3 };
+function sortVariantTables(key) {
+    if (key) {
+        const cur = AppState.variantSort || {};
+        AppState.variantSort = { key, dir: cur.key === key ? -(cur.dir || 1) : 1 };
+    }
+    const sort = AppState.variantSort;
+    if (!sort) return;
+    const val = row => sort.key === "status" ? STATUS_SORT[row.dataset.status || ""]
+                     : Number(row.dataset[sort.key]);
+    document.querySelectorAll("#chromTabContent table.variant-table tbody").forEach(tbody => {
+        [...tbody.rows]
+            .sort((a, b) => ((val(a) - val(b)) || (Number(a.dataset.pos) - Number(b.dataset.pos))) * sort.dir)
+            .forEach(r => tbody.appendChild(r));
+    });
+    document.querySelectorAll("#chromTabContent th.sortable").forEach(th => {
+        th.classList.toggle("sorted-asc",  th.dataset.sort === sort.key && sort.dir > 0);
+        th.classList.toggle("sorted-desc", th.dataset.sort === sort.key && sort.dir < 0);
+    });
+}
+
+function buildVariantTabs(data, keepChrom) {
     const tabsContainer    = document.getElementById("chromTabs");
     const contentContainer = document.getElementById("chromTabContent");
     const totalCountEl     = document.getElementById("variant-count");
@@ -201,6 +532,10 @@ function buildVariantTabs(data) {
         tabsContainer.classList.add("show-empty");
     }
 
+    // After a rebuild stay on the sequence that was showing.
+    const wantChrom = keepChrom || document.querySelector("#chromTabs .nav-link.active")?.title;
+    const activeIndex = Math.max(0, chroms.indexOf(wantChrom));
+
     chroms.forEach((chrom, index) => {
         let variants = grouped[chrom];
 
@@ -214,14 +549,16 @@ function buildVariantTabs(data) {
         li.role      = "presentation";
 
         const btn = document.createElement("button");
-        btn.className        = "nav-link" + (index === 0 ? " active" : "");
+        btn.className        = "nav-link" + (index === activeIndex ? " active" : "");
         btn.id               = `tab-${chrom}`;
         btn.dataset.bsToggle = "tab";
         btn.dataset.bsTarget = `#${chrom.replace(/\./g, '\\.')}`;
         btn.dataset.count    = variants.length;
         btn.type             = "button";
         btn.role             = "tab";
-        btn.textContent      = `${chrom} (${variants.length})`;
+        btn.title            = chrom;
+        btn.innerHTML        = `<span class="chrom-name">${escapeTabText(chrom)}</span>`
+                             + `<span class="chrom-count">(${variants.length})</span>`;
 
         if (variants.length === 0) btn.classList.add("tab-empty");
 
@@ -230,7 +567,7 @@ function buildVariantTabs(data) {
 
         // Create tab pane
         const pane = document.createElement("div");
-        pane.className = "tab-pane fade" + (index === 0 ? " show active" : "");
+        pane.className = "tab-pane fade" + (index === activeIndex ? " show active" : "");
         pane.id        = `${chrom}`;
         pane.role      = "tabpanel";
 
@@ -239,54 +576,33 @@ function buildVariantTabs(data) {
         wrapper.style.maxHeight = "350px";
         wrapper.style.overflowY = "auto";
 
-        const table = document.createElement("table");
-        table.className = "table table-sm table-hover align-middle";
-        table.innerHTML = `
-            <thead class="table-light sticky-top">
-                <tr>
-                    <th>Pos</th><th>Ref</th><th>Alt</th><th>Info</th><th>Action</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        `;
-
+        const table = createVariantTable();
         const tbody = table.querySelector("tbody");
         variants.forEach(v => {
             if (v.pos === 0) return;
-
-            const row = document.createElement("tr");
-            row.style.cursor = "pointer";
-
-            row.innerHTML = `
-                <td>${v.pos}</td>
-                <td>${v.ref}</td>
-                <td>${v.alt}</td>
-                <td class="text-muted small editable-info" contenteditable="true">
-                    ${v.info || ""}
-                </td>
-                <td><button class="btn btn-sm btn-danger delete-btn">X</button></td>
-            `;
-
-            row.querySelector(".delete-btn").addEventListener("click", (e) => {
-                e.stopPropagation();
-                if (confirm(`Delete variant at ${v.chrom}:${v.pos}?`)) {
-                    AppState.variants = AppState.variants.filter(varObj => 
-                        !(varObj.chrom === v.chrom && varObj.pos === v.pos)
-                    );
-                    recordVariantRemoved(v);
-                    buildVariantTabs(AppState.variants);
-                }
-            });
-
-            row.addEventListener("click", () => selectVariantRow(row, v));
-
-            tbody.appendChild(row);
+            tbody.appendChild(createVariantRow(v));
         });
 
         wrapper.appendChild(table);
         pane.appendChild(wrapper);
         contentContainer.appendChild(pane);
     });
+
+    applyTabLayout();
+    sortVariantTables();
+
+    // Keep the selected variant highlighted after a rebuild.
+    const sel = AppState.currentSelection?.variant;
+    if (sel) {
+        const row = [...contentContainer.querySelectorAll("tr.variant-row")]
+            .find(r => r._variant && r._variant.chrom === sel.chrom && r._variant.pos === sel.pos);
+        if (row) {
+            row.classList.add("selected");
+            AppState.selectedRow = row;
+            AppState.currentSelection.row = row;
+        }
+    }
+    if (typeof afterVariantTablesBuilt === "function") afterVariantTablesBuilt();
 
     if (!tabsContainer.dataset.emptyTabTrackListener) {
         tabsContainer.addEventListener("shown.bs.tab", () => {
