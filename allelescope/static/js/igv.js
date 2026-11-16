@@ -144,7 +144,7 @@ function enforceMutualExclusion(el) {
 
         if (other && other.checked) {
             other.checked = false;
-            alert("This filter is mutually exclusive with its complement. The other filter has been unchecked.");
+            showFilterMessage("Require and exclude cannot both be set: the other one was cleared");
 
             // Update state immediately
             FILTER_STATE[complementId] = false;

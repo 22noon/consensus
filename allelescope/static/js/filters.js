@@ -25,7 +25,6 @@ function initFilterPresetControls() {
 
     // SAVE
     saveBtn.onclick = () => {
-        alert("Saving current filters as preset. This will not save your current position or variant selection, only the filter settings.");
         const name = input.value.trim();
         if (!name) {
             input.classList.add("is-invalid");
@@ -44,6 +43,7 @@ function initFilterPresetControls() {
         refreshOptions();
 
         input.value = "";
+        showFilterMessage(`Saved filter preset "${name}" (filters only, not the position)`);
     };
 
     // LOAD
@@ -62,12 +62,16 @@ function initFilterPresetControls() {
         const name = select.value;
         if (!name) return;
 
-        if (!confirm(`Delete preset "${name}"?`)) return;
-
+        const saved = presets[name];
         delete presets[name];
 
         localStorage.setItem("igv_filter_presets", JSON.stringify(presets));
         refreshOptions();
+        showToast(`Deleted filter preset "${name}"`, { action: { label: "Undo", onClick: () => {
+            presets[name] = saved;
+            localStorage.setItem("igv_filter_presets", JSON.stringify(presets));
+            refreshOptions();
+        } } });
     };
 }
 
@@ -134,7 +138,137 @@ function writeFilterElement(el, value) {
     }
 }
 
+/*
+ * One list for flags and read types, each with Any / Require / Exclude.
+ *
+ * The page has two tick boxes per property, "filter-X" under Include and
+ * "retain-X" under Exclude. They stay as they are (hidden), so presets,
+ * saved filters and the request parameters are unchanged; the three-way
+ * control sets them and is set from them.
+ */
+const TRI_STATE_GROUPS = [
+    ["SAM flags", [
+        ["duplicates",    "Duplicates",       "Marked as a PCR or optical duplicate (SAM flag 0x400)"],
+        ["properpair",    "Proper-pair flag", "The aligner's proper-pair flag (SAM flag 0x2)"],
+        ["secondary",     "Secondary",        "Secondary alignment (SAM flag 0x100)"],
+        ["supplementary", "Supplementary",    "Supplementary part of a split alignment (SAM flag 0x800)"],
+        ["qcfail",        "QC failed",        "Failed platform or vendor quality checks (SAM flag 0x200)"],
+        ["paired",        "Paired",           "Sequenced as a pair (SAM flag 0x1)"],
+        ["softclips",     "Soft clips",       "Has soft-clipped bases at either end"],
+    ]],
+    ["Read types (XO tag)", [
+        ["tag-overlap",         "overlap",     "Both reads of the pair cross the site (independent evidence from both)"],
+        ["tag-nonspanningmate", "mates",       "Mate of a read that crosses the site; it does not cross the site itself"],
+        ["tag-splitx",          "split mates", "Other part of a split read that crosses the site; it does not cross the site itself"],
+        ["tag-split",           "split reads", "Read with a supplementary alignment elsewhere (SA tag)"],
+        ["tag-proper",          "proper",      "Proper-pair flag and the mates face each other (F1R2 or R1F2)"],
+        ["tag-improper",        "improper",    "Paired, but not proper as above"],
+    ]],
+    ["Pair orientation", [
+        ["tag-f1r2", "F1R2", "Read 1 forward, read 2 reverse"],
+        ["tag-r1f2", "R1F2", "Read 1 reverse, read 2 forward"],
+        ["tag-f1f2", "F1F2", "Both reads forward"],
+        ["tag-r1r2", "R1R2", "Both reads reverse"],
+    ]],
+];
+
+function buildTriStateFilters() {
+    if (document.getElementById("collapseFlags")) return;
+    const includeItem = document.getElementById("collapseInclude")?.closest(".accordion-item");
+    const excludeItem = document.getElementById("collapseExclude")?.closest(".accordion-item");
+    if (!includeItem || !excludeItem) return;
+
+    const rows = TRI_STATE_GROUPS.map(([group, items]) => {
+        const body = items.map(([key, label, tip]) => {
+            if (!document.getElementById(`filter-${key}`) || !document.getElementById(`retain-${key}`)) return "";
+            const name = `tri-${key}`;
+            const opt = (value, text, cls) => `
+                <input type="radio" class="btn-check" name="${name}" id="${name}-${value}" value="${value}" autocomplete="off">
+                <label class="btn btn-outline-${cls}" for="${name}-${value}">${text}</label>`;
+            return `
+            <div class="tri-row d-flex align-items-center justify-content-between gap-2 py-1" data-key="${key}">
+                <span class="small" title="${tip}">${label}</span>
+                <div class="btn-group btn-group-sm tri-state" role="group" aria-label="${label}">
+                    ${opt("any", "any", "secondary")}${opt("require", "require", "primary")}${opt("exclude", "exclude", "danger")}
+                </div>
+            </div>`;
+        }).join("");
+        return `<h6 class="small text-muted text-uppercase mt-2 mb-1">${group}</h6>${body}`;
+    }).join("");
+
+    const item = document.createElement("div");
+    item.className = "accordion-item";
+    item.innerHTML = `
+        <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse"
+                    data-bs-target="#collapseFlags">Flags and read types</button>
+        </h2>
+        <div id="collapseFlags" class="accordion-collapse collapse" data-bs-parent="#readFilterAccordion">
+            <div class="accordion-body pt-1">
+                <div class="small text-muted mb-1">
+                    <b>require</b>: only reads with it; <b>exclude</b>: hide reads with it.
+                    Hover a name for its meaning.</div>
+                ${rows}
+            </div>
+        </div>`;
+    includeItem.before(item);
+    includeItem.style.display = "none";
+    excludeItem.style.display = "none";
+
+    item.addEventListener("change", e => {
+        const radio = e.target.closest('input[type="radio"]');
+        if (!radio) return;
+        const key = radio.closest(".tri-row").dataset.key;
+        const inc = document.getElementById(`filter-${key}`);
+        const exc = document.getElementById(`retain-${key}`);
+        inc.checked = radio.value === "require";
+        exc.checked = radio.value === "exclude";
+        // Announce the box that is now set (or Include when neither is):
+        // the require/exclude rule clears the complement of the box it gets.
+        (exc.checked ? exc : inc).dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    syncTriStateFilters();
+}
+
+function syncTriStateFilters() {
+    document.querySelectorAll("#collapseFlags .tri-row").forEach(row => {
+        const key = row.dataset.key;
+        const state = document.getElementById(`filter-${key}`)?.checked ? "require"
+                    : document.getElementById(`retain-${key}`)?.checked ? "exclude" : "any";
+        const radio = row.querySelector(`input[value="${state}"]`);
+        if (radio) radio.checked = true;
+    });
+}
+
+/* Active filters at the top of the Filters card, with a count in its header. */
+function placeActiveFilters() {
+    const list = document.getElementById("active-filters");
+    const accordion = document.getElementById("readFilterAccordion");
+    if (!list || !accordion || document.getElementById("active-filters-block")) return;
+    const oldCard = list.closest(".card");
+    const block = document.createElement("div");
+    block.id = "active-filters-block";
+    block.className = "px-2 py-2 border-bottom small";
+    accordion.before(block);
+    block.appendChild(list);
+    list.classList.remove("mt-1");
+    if (list.textContent.trim() === "None") list.textContent = "No filters: every read is shown";
+    if (oldCard && !oldCard.contains(accordion)) oldCard.remove();
+
+    const title = [...accordion.closest(".card").querySelectorAll(".card-header strong")]
+        .find(el => el.textContent.trim() === "Filters");
+    if (title && !document.getElementById("filter-active-count")) {
+        const badge = document.createElement("span");
+        badge.id = "filter-active-count";
+        badge.className = "badge rounded-pill bg-primary ms-1";
+        badge.style.display = "none";
+        title.appendChild(badge);
+    }
+}
+
 function initFilterState() {
+    buildTriStateFilters();
+    placeActiveFilters();
     // Numeric limits start empty. Pages generated by older versions carry
     // value="0" in these boxes; clear them so a stale page cannot start with
     // a real "maximum 0" filter.
@@ -475,8 +609,15 @@ function updateFilterSummary() {
     });
     active.push(...extraActiveFilters());
 
+    if (typeof syncTriStateFilters === "function") syncTriStateFilters();
+    const countBadge = document.getElementById("filter-active-count");
+    if (countBadge) {
+        countBadge.textContent = active.length ? `${active.length} active` : "";
+        countBadge.style.display = active.length ? "" : "none";
+    }
+
     if (active.length === 0) {
-        container.textContent = "None";
+        container.textContent = "No filters: every read is shown";
         return;
     }
 

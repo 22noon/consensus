@@ -407,3 +407,10 @@ tr.variant-row:hover .row-delete, tr.variant-row.selected .row-delete, .row-dele
     position: fixed; right: 1rem; top: 5rem; z-index: 2000; width: 22rem;
 }
 .shortcut-help kbd { font-size: 0.75rem; }
+
+/* Flags and read types: three-way switches (filters.js) */
+.tri-state .btn { padding: 0.05rem 0.45rem; font-size: 0.75rem; }
+.tri-state .btn-check:checked + .btn-outline-secondary {
+    background: #f1f3f5; color: #6c757d; border-color: #ced4da;
+}
+.tri-row + .tri-row { border-top: 1px solid #f1f3f5; }
