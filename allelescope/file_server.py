@@ -13,10 +13,12 @@ import pysam
 import sys
 import re
 import hashlib
+import threading
 import json
 from pathlib import Path
 
-from .process_variant import process_variant, ensure_current_bam_dir, PROCESSING_VERSION
+from .process_variant import (process_variant, ensure_current_bam_dir, site_stem, site_sample,
+                              read_site_info, PROCESSING_VERSION)
 from .read_filters import filter_reads
 import shutil
 
@@ -115,8 +117,25 @@ def build_cache_key(*args):
     print(f"Cache key: {key}")
     return hashlib.md5(key).hexdigest()
 
-def processed_bam(serverpath, Chrom, Pos, Ref):
-    return process_variant(serverpath, Chrom, Pos, Ref)
+# IGV asks for a BAM and its index at the same time, and quick filter changes
+# repeat requests, so one cached file can be requested by several threads at
+# once. Each cache entry is built under its own lock, into temporary files
+# that are renamed into place when complete.
+_cache_locks = {}
+_cache_locks_guard = threading.Lock()
+
+
+def _cache_lock(key):
+    with _cache_locks_guard:
+        return _cache_locks.setdefault(key, threading.Lock())
+
+
+def processed_bam(serverpath, Chrom, Pos, Ref, sample=None):
+    # One preparation per site at a time; a second request waits and then
+    # finds the site prepared.
+    key = f"site|{Path(serverpath).resolve()}|{Chrom}|{Pos}|{site_sample(sample)}"
+    with _cache_lock(key):
+        return process_variant(serverpath, Chrom, Pos, Ref, sample=sample)
 
 
 def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
@@ -128,7 +147,8 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
     bam_file = ensure_current_bam_dir(serverpath) / f"{filename}{token}.calmd.bam"
     print(f"Getting filtered reads from BAM for {filename} with params {params} from {bam_file}", flush=True)
     if not bam_file.exists():
-        processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"))
+        processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"),
+                      sample=params.get("Sample"))
 
     return filter_reads(bam_file, params)
 
@@ -139,11 +159,22 @@ def build_filtered_bam(serverpath, cache_dir, filename, cache_key, params):
     if bam_path.exists() and bai_path.exists():
         return bam_path
 
-    header, reads = get_filtered_reads_bam(serverpath, filename, **params)
-    with pysam.AlignmentFile(str(bam_path), "wb", header=header) as out:
-        for read in reads:
-            out.write(read)
-    pysam.index(str(bam_path))
+    with _cache_lock(str(bam_path)):
+        if bam_path.exists() and bai_path.exists():
+            return bam_path
+        tmp_bam = cache_dir / f"{cache_key}.{threading.get_ident()}.tmp.bam"
+        tmp_bai = Path(f"{tmp_bam}.bai")
+        try:
+            header, reads = get_filtered_reads_bam(serverpath, filename, **params)
+            with pysam.AlignmentFile(str(tmp_bam), "wb", header=header) as out:
+                for read in reads:
+                    out.write(read)
+            pysam.index(str(tmp_bam), str(tmp_bai))
+            tmp_bam.replace(bam_path)
+            tmp_bai.replace(bai_path)
+        finally:
+            tmp_bam.unlink(missing_ok=True)
+            tmp_bai.unlink(missing_ok=True)
     return bam_path
 
 
@@ -165,7 +196,7 @@ def serve_bai(browser=None):
 
     Chrom = request.args.get("Chrom")
     Pos = request.args.get("Pos")
-    filename = f"variant_{Chrom}_{Pos}"
+    filename = site_stem(Chrom, Pos, request.args.get("Sample"))
     params = request.args.to_dict()
     cache_key = build_cache_key(filename, *params.values())
     print(f"Cache key for BAI: {cache_key}", flush=True)
@@ -195,11 +226,12 @@ def serve_bam(browser=None):
     Chrom = request.args.get("Chrom")
     Pos = request.args.get("Pos")
     Ref = request.args.get("Ref")
-    filename = f"variant_{Chrom}_{Pos}"
+    Sample = request.args.get("Sample")
+    filename = site_stem(Chrom, Pos, Sample)
 
     bam_file = ensure_current_bam_dir(serverpath) / f"{filename}.calmd.bam"
     if not bam_file.exists():
-        processed_bam(serverpath, Chrom, Pos, Ref)
+        processed_bam(serverpath, Chrom, Pos, Ref, sample=Sample)
 
     params = request.args.to_dict()
     cache_key = build_cache_key(filename, *params.values())
@@ -227,8 +259,9 @@ def isolate_reads(browser=None):
     pos   = params.get("Pos")
     print(f"ISOLATE_READS HIT: {browser}, {chrom}, {pos}, {filter_string}, token={token}", flush=True)
 
-    out_bam = serverpath / f"bam/variant_{chrom}_{pos}{token}.calmd.bam"
-    in_bam = serverpath / f"bam/variant_{chrom}_{pos}.calmd.bam"
+    stem = site_stem(chrom, pos, params.get("Sample"))
+    out_bam = serverpath / "bam" / f"{stem}{token}.calmd.bam"
+    in_bam = serverpath / "bam" / f"{stem}.calmd.bam"
     print("EXTRACT_READS HIT:", browser, chrom, pos, filter_string, in_bam, out_bam, token, flush=True)
 
     if not in_bam or not os.path.exists(in_bam):
@@ -262,8 +295,9 @@ def remove_reads(browser=None):
     pos   = params.get("Pos")
     print(f"REMOVE_READS HIT: {browser}, {chrom}, {pos}, {filter_string}, token={token}", flush=True)
 
-    out_bam = serverpath / f"bam/variant_{chrom}_{pos}{token}.calmd.bam"
-    in_bam = serverpath / f"bam/variant_{chrom}_{pos}.calmd.bam"
+    stem = site_stem(chrom, pos, params.get("Sample"))
+    out_bam = serverpath / "bam" / f"{stem}{token}.calmd.bam"
+    in_bam = serverpath / "bam" / f"{stem}.calmd.bam"
     print("REMOVE_READS HIT:", browser, chrom, pos, filter_string, in_bam, out_bam, token, flush=True)
 
     if not in_bam or not os.path.exists(in_bam):
@@ -311,7 +345,7 @@ def extract_reads(browser=None, token=None):
     pos   = params.get("Pos")
 
     # Mirror serve_bam exactly
-    filename  = f"variant_{chrom}_{pos}"
+    filename  = site_stem(chrom, pos, params.get("Sample"))
     cache_key = build_cache_key(filename, *params.values())
     cache_dir = CACHE_ROOT / browser
     bam_path = cache_dir / f"{cache_key}.bam"
@@ -367,13 +401,14 @@ def extract_bam(browser=None):
     Chrom = request.args.get("chrom")
     Pos = request.args.get("pos")
     Ref = request.args.get("ref")
+    Sample = site_sample(request.args.get("sample"))
 
     mock_alleles = []
 
-    result = processed_bam(serverpath, Chrom, Pos, Ref)
+    result = processed_bam(serverpath, Chrom, Pos, Ref, sample=Sample)
     if result == 0:
-        stat_file=f"bam/variant_{Chrom}_{Pos}.bam.indelstats.txt"
-        with open(serverpath / stat_file) as f:
+        stat_file = serverpath / "bam" / f"{site_stem(Chrom, Pos, Sample)}.bam.indelstats.txt"
+        with open(stat_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 fields = line.split("\t")
@@ -381,17 +416,124 @@ def extract_bam(browser=None):
                 count = int(count)
                 pct = round(float(pct)*100, 2)
 
-                mock_alleles.append({
+                allele = {
                     "xa": xa,
                     "xd": 0,
                     "xn": 0,
                     "count": count,
                     "pct": pct,
                     "type": allele_type,
-                })
+                }
+                if len(fields) >= 8:
+                    allele["fwd"] = int(fields[4])
+                    allele["rev"] = int(fields[5])
+                    allele["bq"] = float(fields[6]) if fields[6] else None
+                    allele["mq"] = float(fields[7]) if fields[7] else None
+                mock_alleles.append(allele)
 
-        return jsonify({"success": True, "alleles": mock_alleles})
+        return jsonify({"success": True, "alleles": mock_alleles,
+                        "sampling": read_site_info(serverpath, Chrom, Pos, Sample)})
     return jsonify({"success": False}), 500
+
+
+def _vcf_text(value: str) -> str:
+    """Percent-encode the characters a VCF INFO value cannot hold."""
+    out = []
+    for ch in value:
+        if ch in "%;=,:" or ch in "\t\r\n" or ch == " ":
+            out.append(f"%{ord(ch):02X}")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def instance_vcf(serverpath: Path):
+    """The VCF an instance was built from (the bgzipped copy in its folder)."""
+    candidates = sorted(p for p in Path(serverpath).glob("*.vcf.gz")
+                        if not p.name.endswith(".reviewed.vcf.gz"))
+    return candidates[0] if candidates else None
+
+
+@app.route("/api/review_vcf", methods=["POST"])
+@app.route("/<path:browser>/api/review_vcf", methods=["POST"])
+def review_vcf(browser=None):
+    """
+    The instance's VCF with the browser's review added to each record:
+        INFO/REVIEW       confirmed | doubtful | artefact
+        INFO/REVIEW_NOTE  the note, percent-encoded (%3B for ";", %20 for space ...)
+    Body: {"reviews": {"chrom:pos": {"s": status, "n": note}, ...}}
+    """
+    serverpath = DATA_DIR if browser is None else DATA_DIR / browser
+    src = instance_vcf(serverpath)
+    if src is None:
+        return jsonify({"error": "This instance has no VCF"}), 404
+    reviews = (request.get_json(silent=True) or {}).get("reviews") or {}
+
+    with pysam.VariantFile(str(src)) as vin:
+        header = vin.header.copy()
+        if "REVIEW" not in header.info:
+            header.add_meta("INFO", items=[("ID", "REVIEW"), ("Number", "1"), ("Type", "String"),
+                                           ("Description", "Allelescope review: confirmed, doubtful or artefact")])
+        if "REVIEW_NOTE" not in header.info:
+            header.add_meta("INFO", items=[("ID", "REVIEW_NOTE"), ("Number", "1"), ("Type", "String"),
+                                           ("Description", "Allelescope review note (percent-encoded)")])
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = Path(tmp) / "reviewed.vcf"
+            with pysam.VariantFile(str(out_path), "w", header=header) as vout:
+                for rec in vin:
+                    rec.translate(vout.header)
+                    r = reviews.get(f"{rec.chrom}:{rec.pos}") or {}
+                    status = r.get("s")
+                    note = (r.get("n") or "").strip()
+                    if status in ("confirmed", "doubtful", "artefact"):
+                        rec.info["REVIEW"] = status
+                    if note:
+                        rec.info["REVIEW_NOTE"] = _vcf_text(note)
+                    vout.write(rec)
+            data = out_path.read_bytes()
+
+    name = src.name[:-len(".vcf.gz")] + ".reviewed.vcf"
+    return send_file(io.BytesIO(data), mimetype="text/plain", as_attachment=True, download_name=name)
+
+
+@app.route("/api/depth")
+@app.route("/<path:browser>/api/depth")
+def site_depth(browser=None):
+    """
+    Quick look at a site before it is prepared: how many reads and read pairs
+    (fragments) cross it, and which versions of it are already prepared.
+
+        {"reads": 171234, "pairs": 120345,
+         "prepared": {"all": false, "samples": [2000]}}
+    """
+    serverpath = DATA_DIR if browser is None else DATA_DIR / browser
+    chrom = request.args.get("chrom")
+    pos = request.args.get("pos")
+    try:
+        pos0 = int(pos) - 1
+    except (TypeError, ValueError):
+        return jsonify({"error": "pos must be a number"}), 400
+
+    bam_dir = ensure_current_bam_dir(serverpath)
+    stem = site_stem(chrom, pos)
+    sample_re = re.compile(re.escape(stem) + r"\.s(\d+)\.calmd\.bam$")
+    samples = sorted(int(m.group(1)) for p in bam_dir.glob(f"{stem}.s*.calmd.bam")
+                     if (m := sample_re.match(p.name)))
+    prepared = {"all": (bam_dir / f"{stem}.calmd.bam").exists(), "samples": samples}
+
+    try:
+        with pysam.AlignmentFile(str(serverpath / "alignment.markdup.bam"), "rb") as bam:
+            names = set()
+            reads = 0
+            for read in bam.fetch(chrom, pos0, pos0 + 1):
+                if read.is_unmapped:
+                    continue
+                reads += 1
+                names.add(read.query_name)
+    except (OSError, ValueError) as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({"reads": reads, "pairs": len(names), "prepared": prepared})
 
 @app.route("/api/cache_info")
 @app.route("/<path:browser>/api/cache_info")
@@ -409,10 +551,19 @@ def cache_info(browser=None):
 def clear_cache(browser=None):
     cache_dir = CACHE_ROOT if browser is None else CACHE_ROOT / browser
     print("CACHE_CLEAR HIT:", browser, cache_dir, flush=True)
+    skipped = []
     if cache_dir.exists():
-        shutil.rmtree(cache_dir)
+        # On Windows (including a Windows folder mounted into Docker) a file
+        # that is being served cannot be deleted. Skip such files rather than
+        # failing; they are removed by the next clear.
+        def _skip(func, path, exc):
+            skipped.append(str(path))
+
+        shutil.rmtree(cache_dir, onexc=_skip)
         cache_dir.mkdir(parents=True, exist_ok=True)
-    return jsonify({"success": True})
+        if skipped:
+            print(f"Cache clear skipped {len(skipped)} file(s) in use", flush=True)
+    return jsonify({"success": True, "skipped": len(skipped)})
 
 @app.route("/api/load_default_presets")
 def load_default_presets():
@@ -421,7 +572,7 @@ def load_default_presets():
         return jsonify({"error": "Presets file not found"}), 404
     
     try:
-        with open(preset_path, "r") as f:
+        with open(preset_path, "r", encoding="utf-8") as f:
             return jsonify(json.load(f))
     except Exception as e:
         return jsonify({"error": str(e)}), 500

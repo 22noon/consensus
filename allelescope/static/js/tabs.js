@@ -327,7 +327,166 @@ function syncTabSelect() {
     if (select && active) select.value = active.id;
 }
 
-function buildVariantTabs(data) {
+/*
+ * Variant table rows
+ *
+ *   status | Pos | Ref | Alt | AF | Note | remove
+ *
+ * Status and note come from review.js (remembered per instance). AF is the
+ * VCF's allele fraction, or the fraction observed in the reads (in italics)
+ * once the site has been opened. Removing a row asks nothing; a message
+ * offers to undo it.
+ */
+function createVariantTable() {
+    const table = document.createElement("table");
+    table.className = "table table-sm table-hover align-middle variant-table";
+    table.innerHTML = `
+        <thead class="table-light sticky-top">
+            <tr>
+                <th class="col-status sortable" data-sort="status" title="Review status (sort)">
+                    <i class="bi bi-check2-circle"></i></th>
+                <th class="sortable" data-sort="pos" title="Sort by position">Pos</th>
+                <th>Ref</th><th>Alt</th>
+                <th class="sortable" data-sort="af"
+                    title="Allele fraction from the VCF, or as observed in the reads (in italics) once the site has been opened. Click to sort.">AF</th>
+                <th title="Your note; double-click a cell (or press E) to edit. Hover to see the VCF INFO.">Note</th>
+                <th class="col-del"></th>
+            </tr>
+        </thead>
+        <tbody></tbody>`;
+    table.querySelectorAll("th.sortable").forEach(th =>
+        th.addEventListener("click", () => sortVariantTables(th.dataset.sort)));
+    return table;
+}
+
+function shortAlleleHtml(text) {
+    const t = escapeTabText(text || "");
+    return `<span class="allele-text" title="${t}">${t}</span>`;
+}
+
+/* AF to show for a variant: {text, observed, value} */
+function variantAF(v) {
+    if (typeof v.af === "number" && isFinite(v.af)) {
+        return { value: v.af, text: `${Math.round(v.af * 100)}%`, observed: false };
+    }
+    const site = alleleSite(v);
+    const alleles = (AppState.siteAlleles || {})[siteKey(site)];
+    if (alleles && alleles.length) {
+        const expected = expectedAltAlleles(v);
+        let pct = 0;
+        if (expected.size) {
+            alleles.forEach(a => { if (expected.has(a.xa)) pct += a.pct; });
+        } else {
+            alleles.forEach(a => { if (a.type !== "ref") pct += a.pct; });
+        }
+        return { value: pct / 100, text: `${Math.round(pct)}%`, observed: true };
+    }
+    return { value: -1, text: "–", observed: false };
+}
+
+function fillVariantRow(row, v) {
+    const af = variantAF(v);
+    row.dataset.pos = v.pos;
+    row.dataset.af  = af.value;
+    const review = typeof getReview === "function" ? getReview(v) : null;
+    row.dataset.status = review?.s || "";
+
+    const note = review?.n || "";
+    const vcfInfo = v.info && v.info !== "Manual" ? v.info : "";
+    row.innerHTML = `
+        <td class="col-status">${typeof reviewStatusHtml === "function" ? reviewStatusHtml(v) : ""}</td>
+        <td>${v.pos}</td>
+        <td>${shortAlleleHtml(v.ref)}</td>
+        <td>${shortAlleleHtml(v.alt)}</td>
+        <td class="col-af${af.observed ? " fst-italic" : ""}"
+            title="${af.observed ? "Observed in the reads" : af.value >= 0 ? "From the VCF" : "Not known yet: open the site"}">${af.text}</td>
+        <td class="small editable-info${note ? "" : " text-muted"}" title="${escapeTabText(vcfInfo || v.info || "")}"
+            data-placeholder="add note">${escapeTabText(note || (v.info === "Manual" ? "" : vcfInfo))}</td>
+        <td class="col-del">
+            <button type="button" class="row-delete" title="Remove from the list"
+                    aria-label="Remove ${escapeTabText(v.chrom)}:${v.pos}">
+                <i class="bi bi-x-lg"></i></button></td>`;
+
+    row.querySelector(".row-delete").addEventListener("click", e => {
+        e.stopPropagation();
+        removeVariantWithUndo(v);
+    });
+    const noteCell = row.querySelector(".editable-info");
+    noteCell.addEventListener("dblclick", e => {
+        e.stopPropagation();
+        if (typeof editVariantNote === "function") editVariantNote(row, v);
+    });
+}
+
+function createVariantRow(v) {
+    const row = document.createElement("tr");
+    row.className = "variant-row" + (v.info === "Manual" ? " manual-row" : "");
+    row.style.cursor = "pointer";
+    row.dataset.chrom = v.chrom;
+    row._variant = v;
+    fillVariantRow(row, v);
+    row.addEventListener("click", () => selectVariantRow(row, v));
+    return row;
+}
+
+/* Re-render a row in place (keeps selection and listeners on the row). */
+function refreshVariantRow(row) {
+    if (!row || !row._variant) return;
+    fillVariantRow(row, row._variant);
+}
+
+function refreshAllVariantRows() {
+    document.querySelectorAll("#chromTabContent tr.variant-row").forEach(refreshVariantRow);
+}
+
+function removeVariantWithUndo(v) {
+    const before = {
+        variants: AppState.variants.slice(),
+        edits: JSON.parse(JSON.stringify(AppState.variantEdits)),
+    };
+    AppState.variants = AppState.variants.filter(x => !(x.chrom === v.chrom && x.pos === v.pos));
+    if (v.info === "Manual") AppState.manualVariants[v.chrom]?.delete(v.pos);
+    recordVariantRemoved(v);
+    buildVariantTabs(AppState.variants, v.chrom);
+    showToast(`Removed ${v.chrom}:${v.pos}`, {
+        action: {
+            label: "Undo",
+            onClick: () => {
+                AppState.variants = before.variants;
+                AppState.variantEdits = before.edits;
+                saveVariantEdits(before.edits);
+                if (v.info === "Manual") {
+                    (AppState.manualVariants[v.chrom] = AppState.manualVariants[v.chrom] || new Set()).add(v.pos);
+                }
+                buildVariantTabs(AppState.variants, v.chrom);
+            }
+        }
+    });
+}
+
+/* Sort every variant table; the same key again reverses the order. */
+const STATUS_SORT = { "": 0, doubtful: 1, artefact: 2, confirmed: 3 };
+function sortVariantTables(key) {
+    if (key) {
+        const cur = AppState.variantSort || {};
+        AppState.variantSort = { key, dir: cur.key === key ? -(cur.dir || 1) : 1 };
+    }
+    const sort = AppState.variantSort;
+    if (!sort) return;
+    const val = row => sort.key === "status" ? STATUS_SORT[row.dataset.status || ""]
+                     : Number(row.dataset[sort.key]);
+    document.querySelectorAll("#chromTabContent table.variant-table tbody").forEach(tbody => {
+        [...tbody.rows]
+            .sort((a, b) => ((val(a) - val(b)) || (Number(a.dataset.pos) - Number(b.dataset.pos))) * sort.dir)
+            .forEach(r => tbody.appendChild(r));
+    });
+    document.querySelectorAll("#chromTabContent th.sortable").forEach(th => {
+        th.classList.toggle("sorted-asc",  th.dataset.sort === sort.key && sort.dir > 0);
+        th.classList.toggle("sorted-desc", th.dataset.sort === sort.key && sort.dir < 0);
+    });
+}
+
+function buildVariantTabs(data, keepChrom) {
     const tabsContainer    = document.getElementById("chromTabs");
     const contentContainer = document.getElementById("chromTabContent");
     const totalCountEl     = document.getElementById("variant-count");
@@ -373,6 +532,10 @@ function buildVariantTabs(data) {
         tabsContainer.classList.add("show-empty");
     }
 
+    // After a rebuild stay on the sequence that was showing.
+    const wantChrom = keepChrom || document.querySelector("#chromTabs .nav-link.active")?.title;
+    const activeIndex = Math.max(0, chroms.indexOf(wantChrom));
+
     chroms.forEach((chrom, index) => {
         let variants = grouped[chrom];
 
@@ -386,7 +549,7 @@ function buildVariantTabs(data) {
         li.role      = "presentation";
 
         const btn = document.createElement("button");
-        btn.className        = "nav-link" + (index === 0 ? " active" : "");
+        btn.className        = "nav-link" + (index === activeIndex ? " active" : "");
         btn.id               = `tab-${chrom}`;
         btn.dataset.bsToggle = "tab";
         btn.dataset.bsTarget = `#${chrom.replace(/\./g, '\\.')}`;
@@ -404,7 +567,7 @@ function buildVariantTabs(data) {
 
         // Create tab pane
         const pane = document.createElement("div");
-        pane.className = "tab-pane fade" + (index === 0 ? " show active" : "");
+        pane.className = "tab-pane fade" + (index === activeIndex ? " show active" : "");
         pane.id        = `${chrom}`;
         pane.role      = "tabpanel";
 
@@ -413,48 +576,11 @@ function buildVariantTabs(data) {
         wrapper.style.maxHeight = "350px";
         wrapper.style.overflowY = "auto";
 
-        const table = document.createElement("table");
-        table.className = "table table-sm table-hover align-middle";
-        table.innerHTML = `
-            <thead class="table-light sticky-top">
-                <tr>
-                    <th>Pos</th><th>Ref</th><th>Alt</th><th>Info</th><th>Action</th>
-                </tr>
-            </thead>
-            <tbody></tbody>
-        `;
-
+        const table = createVariantTable();
         const tbody = table.querySelector("tbody");
         variants.forEach(v => {
             if (v.pos === 0) return;
-
-            const row = document.createElement("tr");
-            row.style.cursor = "pointer";
-
-            row.innerHTML = `
-                <td>${v.pos}</td>
-                <td>${v.ref}</td>
-                <td>${v.alt}</td>
-                <td class="text-muted small editable-info" contenteditable="true">
-                    ${v.info || ""}
-                </td>
-                <td><button class="btn btn-sm btn-danger delete-btn">X</button></td>
-            `;
-
-            row.querySelector(".delete-btn").addEventListener("click", (e) => {
-                e.stopPropagation();
-                if (confirm(`Delete variant at ${v.chrom}:${v.pos}?`)) {
-                    AppState.variants = AppState.variants.filter(varObj => 
-                        !(varObj.chrom === v.chrom && varObj.pos === v.pos)
-                    );
-                    recordVariantRemoved(v);
-                    buildVariantTabs(AppState.variants);
-                }
-            });
-
-            row.addEventListener("click", () => selectVariantRow(row, v));
-
-            tbody.appendChild(row);
+            tbody.appendChild(createVariantRow(v));
         });
 
         wrapper.appendChild(table);
@@ -463,6 +589,20 @@ function buildVariantTabs(data) {
     });
 
     applyTabLayout();
+    sortVariantTables();
+
+    // Keep the selected variant highlighted after a rebuild.
+    const sel = AppState.currentSelection?.variant;
+    if (sel) {
+        const row = [...contentContainer.querySelectorAll("tr.variant-row")]
+            .find(r => r._variant && r._variant.chrom === sel.chrom && r._variant.pos === sel.pos);
+        if (row) {
+            row.classList.add("selected");
+            AppState.selectedRow = row;
+            AppState.currentSelection.row = row;
+        }
+    }
+    if (typeof afterVariantTablesBuilt === "function") afterVariantTablesBuilt();
 
     if (!tabsContainer.dataset.emptyTabTrackListener) {
         tabsContainer.addEventListener("shown.bs.tab", () => {

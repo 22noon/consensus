@@ -24,3 +24,18 @@ const AppState = {
     Token: "",
     API_BASE:            window.location.pathname.replace(/\/[^\/]*$/, ''),
 };
+
+/*
+ * Modules added after a viewer was built are not listed in its page. Load
+ * any that are missing (in order); each one copes with being loaded late.
+ */
+const LATE_MODULES = ["ui.js", "sampling.js", "review.js"];
+document.addEventListener("DOMContentLoaded", () => {
+    LATE_MODULES.forEach(name => {
+        if (document.querySelector(`script[src$="/static/js/${name}"]`)) return;
+        const script = document.createElement("script");
+        script.src = `/static/js/${name}`;
+        script.async = false;
+        document.body.appendChild(script);
+    });
+});

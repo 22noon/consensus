@@ -16,6 +16,10 @@ pip install allelescope
 ```
 and the package will be installed. The package requires Python 3.12 or above.
 
+**Windows:** pysam and samtools do not run natively on Windows. Use the Docker
+image instead; it works the same way on Windows, macOS and Linux. See
+[`docker/README.md`](../docker/README.md).
+
 ## Workflow overview
 
 ```mermaid
