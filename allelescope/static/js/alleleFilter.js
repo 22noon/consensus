@@ -139,8 +139,11 @@ async function fetchAlleles(site) {
     });
     if (sample) params.set("sample", sample);
     // The first request for a site prepares it, which can take a while at
-    // high depth: show the loading indicator meanwhile.
+    // high depth: show the loading indicator, and a message if it is slow.
     if (typeof showLoading === "function") showLoading(true);
+    const preparing = setTimeout(() => {
+        if (typeof showPreparingPanel === "function") showPreparingPanel(site);
+    }, 250);
     try {
         const response = await fetch(`${AppState.API_BASE}/api/extract?${params.toString()}`);
         if (!response.ok) return null;
@@ -154,6 +157,7 @@ async function fetchAlleles(site) {
         console.error("Error during allele extraction:", err);
         return null;
     } finally {
+        clearTimeout(preparing);
         if (typeof showLoading === "function") showLoading(false);
     }
 }

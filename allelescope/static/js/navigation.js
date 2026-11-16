@@ -50,11 +50,7 @@ async function selectVariantRow(row, variant, knownAlleles) {
     // The first request for a site makes the server extract its reads. Wait
     // for it before loading the track so the site is only processed once.
     const seq = ++variantSelectionSeq;
-    const preparing = knownAlleles === undefined
-        ? setTimeout(() => { if (seq === variantSelectionSeq) showPreparingPanel(site); }, 250)
-        : null;
     const alleles = knownAlleles !== undefined ? knownAlleles : await fetchAlleles(site);
-    clearTimeout(preparing);
     if (seq !== variantSelectionSeq) return;   // another row was selected meanwhile
 
     // The observed AF is known now.
