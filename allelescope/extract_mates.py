@@ -1,3 +1,4 @@
+import hashlib
 import pysam
 import sys
 from collections import defaultdict
@@ -21,10 +22,15 @@ def summarise_indels(indels):
     return net, ','.join(parts), max_del, max_ins
 
 
-def get_allele_at_base(read, target_pos):
+def get_allele_at_base(read, target_pos, ref_base=None):
     """
     Returns a descriptive allele string for what the read shows
     at target_pos (0-based reference coordinate).
+
+    ``ref_base`` is the reference base at target_pos. It is the same for
+    every read, so callers should look it up once; without it the base is
+    parsed from each read's MD tag, which is slower and wrong when the BAM
+    has no MD tags.
 
     Returns one of:
       'D<len>'    — deletion e.g. 'D7'
@@ -94,7 +100,8 @@ def get_allele_at_base(read, target_pos):
                 elif op == 8:
                     return f"M{base}"
                 else:
-                    ref_base = get_ref_base_from_md(read, target_pos)
+                    if ref_base is None:
+                        ref_base = get_ref_base_from_md(read, target_pos)
                     if ref_base is None:
                         return f"R{base}"   # can't tell, assume ref
                     elif base == ref_base:
@@ -276,6 +283,53 @@ existing project modules, same as the original implementation):
 MATE_FETCH_MERGE_GAP = 1000
 
 
+def _reference_base(ref_fasta, chrom, pos0):
+    """Upper-case reference base at a 0-based position, or None if unavailable."""
+    if not ref_fasta:
+        return None
+    try:
+        with pysam.FastaFile(str(ref_fasta)) as fasta:
+            base = fasta.fetch(chrom, pos0, pos0 + 1).upper()
+    except (OSError, ValueError, KeyError, IndexError):
+        return None
+    return base if len(base) == 1 and base in "ACGTN" else None
+
+
+def _base_quality_at(read, target_pos):
+    """Base quality of the read at reference position target_pos (0-based),
+    or None where the read has no base there (deletion, skip)."""
+    quals = read.query_qualities
+    if quals is None:
+        return None
+    qpos, rpos = 0, read.reference_start
+    for op, length in read.cigartuples or ():
+        if op in (0, 7, 8):
+            if rpos <= target_pos < rpos + length:
+                return quals[qpos + target_pos - rpos]
+            qpos += length
+            rpos += length
+        elif op in (1, 4):
+            qpos += length
+        elif op in (2, 3):
+            if rpos <= target_pos < rpos + length:
+                return None
+            rpos += length
+    return None
+
+
+def _name_rank(qname: str) -> bytes:
+    """Fixed pseudo-random sort key for a read name (same on every run)."""
+    return hashlib.blake2b(qname.encode("utf-8", "surrogateescape"), digest_size=8,
+                           person=b"allelescope").digest()
+
+
+def _choose_read_names(names, max_pairs):
+    """The read names to keep, or None to keep all."""
+    if not max_pairs or max_pairs <= 0 or len(names) <= max_pairs:
+        return None
+    return set(sorted(names, key=_name_rank)[:max_pairs])
+
+
 def _merge_positions(positions, gap):
     """
     Merge 0-based start positions into half-open fetch intervals.
@@ -300,6 +354,10 @@ def extract_mates(
     chrom: str,
     start: int,
     end: int,
+    ref_fasta: str = None,
+    max_pairs: int = None,
+    sample_info: dict = None,
+    allele_stats: dict = None,
 ) -> defaultdict:
     """
     Extract overlapping reads and their mates for a genomic region.
@@ -328,12 +386,26 @@ def extract_mates(
         chrom:     Chromosome name
         start:     1-based start position
         end:       1-based end position
+        max_pairs: keep at most this many read pairs (fragments) crossing
+                   the site, chosen by a fixed hash of the read name; their
+                   mates and split partners are kept with them. Allele
+                   counts still use every read. None keeps everything.
+        sample_info: optional dict, filled with "pairs_total" and
+                   "pairs_kept".
+        allele_stats: optional dict, filled per allele with
+                   {"fwd", "rev", "bq_sum", "bq_n", "mq_sum"} over the same
+                   reads as the allele counts (one read per fragment).
+        ref_fasta: indexed reference FASTA. Used to look up the reference
+                   base at the site once; without it each read's MD tag
+                   is parsed instead.
 
     Returns:
         allele_counts: dict mapping allele string -> read count (one
         observation per physical read/fragment, deterministic).
     """
     allele_counts = defaultdict(int)
+
+    site_ref_base = _reference_base(ref_fasta, chrom, start - 1)
 
     bam = pysam.AlignmentFile(src_bam, "rb")
     header = bam.header.to_dict()
@@ -393,18 +465,36 @@ def extract_mates(
 
     # ---- Pass 1b: write every alignment overlapping the region, split or not ----
     print(f"Writing overlapping alignments to {out_bam}...")
+    # ---- Optional subsampling of the read pairs crossing the site ----
+    # Allele counts use every read; only the chosen read pairs are tagged,
+    # written and have their mates fetched. The choice is a fixed hash of the
+    # read name, so both mates and all split segments of a fragment are kept
+    # or dropped together, and the same reads are chosen every time.
+    names = {read.query_name for read in buffered_reads if not read.is_unmapped}
+    keep = _choose_read_names(names, max_pairs)
+    if sample_info is not None:
+        sample_info["pairs_total"] = len(names)
+        sample_info["pairs_kept"] = len(names) if keep is None else len(keep)
+
+    tagged_reads = []
     for read in buffered_reads:
         if read.is_unmapped:
             continue
-#        if read.query_name != "M02063:376:000000000-DYVFW:1:1101:22715:19471":
-#            continue
+        if keep is not None and read.query_name not in keep:
+            # Dropped from the display: only its allele call is needed.
+            if read.reference_start <= target_pos < read.reference_end:
+                covering[read.query_name].append(
+                    (read.is_supplementary, read.reference_start,
+                     get_allele_at_base(read, target_pos, site_ref_base), read)
+                )
+            continue
 
         XO = read.get_tag('XO') if read.has_tag('XO') else 0
         if overlaps_region(read) and crosses_as_pair(read.query_name):
             XO |= Tag_bits['OVERLAP']
         read = tag_read(read, XO)
 
-        allele = get_allele_at_base(read, target_pos)
+        allele = get_allele_at_base(read, target_pos, site_ref_base)
         indels = get_indels_at_base(read, target_pos)
         signed_len, summary_str, max_del, max_ins = summarise_indels(indels)
 
@@ -413,7 +503,7 @@ def extract_mates(
         # where both split segments independently cover target_pos).
         if read.reference_start <= target_pos < read.reference_end:
             covering[read.query_name].append(
-                (read.is_supplementary, read.reference_start, allele)
+                (read.is_supplementary, read.reference_start, allele, read)
             )
 
         read.set_tag("XA", allele,      value_type="Z")
@@ -421,7 +511,9 @@ def extract_mates(
         read.set_tag("XD", max_del,     value_type="i")
         read.set_tag("XN", max_ins,     value_type="i")
         read.set_tag("XS", summary_str, value_type="Z")
+        tagged_reads.append(read)
 
+    for read in tagged_reads:
         overlap_bam.write(calculate_softclip_lengths(read))
         written_records.add((read.query_name, read.reference_start))
 
@@ -440,9 +532,17 @@ def extract_mates(
     # Preference order: non-supplementary (primary) alignment first; among
     # remaining ties, leftmost reference_start. Independent of fetch order.
     for qname, candidates in covering.items():
-        _, _, allele = min(candidates, key=lambda c: (c[0], c[1]))
+        _, _, allele, chosen = min(candidates, key=lambda c: (c[0], c[1]))
         allele_counts[allele] += 1
         XA_dict[qname] = allele
+        if allele_stats is not None:
+            st = allele_stats.setdefault(allele, {"fwd": 0, "rev": 0, "bq_sum": 0, "bq_n": 0, "mq_sum": 0})
+            st["rev" if chosen.is_reverse else "fwd"] += 1
+            st["mq_sum"] += chosen.mapping_quality
+            bq = _base_quality_at(chosen, target_pos)
+            if bq is not None:
+                st["bq_sum"] += bq
+                st["bq_n"] += 1
 
     # ---- Build the set of "other alignments" that still need fetching ----
     # Anything whose target (chrom, pos) matches an already-written record
@@ -515,8 +615,13 @@ def extract_mates(
     return allele_counts
 
 
-def _write_indel_stats(allele_counts: defaultdict, out_bam: str) -> None:
-    """Write indel statistics file alongside the output BAM."""
+def _write_indel_stats(allele_counts: defaultdict, out_bam: str, allele_stats: dict = None) -> None:
+    """
+    Write the allele table alongside the output BAM, one allele per line:
+        allele  count  fraction  type  [fwd  rev  mean_BQ  mean_MAPQ]
+    The bracketed columns are written when allele_stats is given; mean_BQ is
+    empty for alleles without a base at the site (deletions).
+    """
     indelstat_output = f"{out_bam}.indelstats.txt"
     total = sum(allele_counts.values())
     with open(indelstat_output, 'w', encoding='utf-8') as f:
@@ -526,7 +631,13 @@ def _write_indel_stats(allele_counts: defaultdict, out_bam: str) -> None:
             elif allele[0] == 'I': allele_type = 'ins'
             elif allele[0] == 'M': allele_type = 'snp'
             else:                  allele_type = 'other'
-            f.write(f"{allele}\t{count}\t{count/total:.4f}\t{allele_type}\n")
+            line = f"{allele}\t{count}\t{count/total:.4f}\t{allele_type}"
+            if allele_stats is not None and allele in allele_stats:
+                st = allele_stats[allele]
+                bq = f"{st['bq_sum'] / st['bq_n']:.1f}" if st["bq_n"] else ""
+                mq = f"{st['mq_sum'] / max(1, st['fwd'] + st['rev']):.1f}"
+                line += f"\t{st['fwd']}\t{st['rev']}\t{bq}\t{mq}"
+            f.write(line + "\n")
 
 
 if __name__ == "__main__":

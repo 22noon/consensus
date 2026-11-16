@@ -7,70 +7,8 @@
             <i class="bi bi-gear"></i>
         </button>
         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="cacheMenuButton">
-            <li><h6 class="dropdown-header">Cache Management</h6></li>
-            <li><button class="dropdown-item" onclick="getCacheInfo()">Current local Usage: <span id="cache-size">Loading...</span></button></li>
-            <li><button class="dropdown-item" onclick="getCacheInfoGlobal()">Current Global Usage: <span id="cache-size-global">Loading...</span></button></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><button class="dropdown-item text-danger" onclick="clearCache()">Clear localCache</button></li>
-            <li><button class="dropdown-item text-danger" onclick="clearCacheGlobal()">Clear Global Cache</button></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><button class="dropdown-item text-warning" onclick="clearPersistentVariants()">Clear Persistent Variants</button></li>
-            <li><button class="dropdown-item text-warning" onclick="clearLocalStorage()">Clear Local Storage</button></li>
-            <li><hr class="dropdown-divider"></li>
-            <li><button class="dropdown-item" onclick="exportFilterSettings()">Export Filter Settings</button></li>
+            <!-- Filled in by static/js/ui.js (buildSettingsMenu) -->
         </ul>
         </div>
         </div>
-        <script>
-        async function getCacheInfo() {
-        if (typeof AppState === 'undefined') return;
-        const response = await fetch(`${AppState.API_BASE}/api/cache_info`);
-        const data = await response.json();
-        const sizeInMB = (data.size / (1024 * 1024)).toFixed(2);
-        document.getElementById('cache-size').textContent = sizeInMB + ' MB';
-        }
-        async function getCacheInfoGlobal() {
-        if (typeof AppState === 'undefined') return;
-        const response = await fetch(`/api/cache_info`);
-        const data = await response.json();
-        const sizeInMB = (data.size / (1024 * 1024)).toFixed(2);
-        document.getElementById('cache-size-global').textContent = sizeInMB + ' MB';
-        }
-
-        async function clearCache() {
-        if (typeof AppState === 'undefined') return;
-        if (!confirm('Are you sure you want to clear the local cache?')) return;
-        const response = await fetch(`${AppState.API_BASE}/api/clear_cache`, { method: 'POST' });
-        if (response.ok) {
-        alert('Cache cleared.');
-        getCacheInfo();
-        }
-        }
-
-        async function clearCacheGlobal() {
-        if (typeof AppState === 'undefined') return;
-        if (!confirm('Are you sure you want to clear the Global cache? ')) return;
-        const response = await fetch(`/api/clear_cache`, { method: 'POST' });
-        if (response.ok) {
-        alert('Cache cleared.');
-        getCacheInfoGlobal();
-        }
-        }
-
-        function clearPersistentVariants() {
-        if (!confirm('Are you sure you want to clear your persistent variants?')) return;
-        localStorage.removeItem('persistent_variants');
-        alert('Persistent variants cleared. Page will reload.');
-        window.location.reload();
-        }
-
-        function clearLocalStorage() {
-        if (!confirm('Are you sure you want to clear local storage? This will reset all your saved filters and presets.')) return;
-        localStorage.clear();
-        alert('Local storage cleared. Page will reload.');
-        window.location.reload();
-        }
-
-        window.addEventListener('load', getCacheInfo);
-        window.addEventListener('load', getCacheInfoGlobal);
-        </script>
+        

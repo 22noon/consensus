@@ -97,3 +97,60 @@ def test_generate_viewer_writes_utf8(tmp_path):
     assert run.returncode == 0, run.stderr[-600:]
     html = (tmp_path / "interactive_variants.html").read_text(encoding="utf-8")
     assert "◀" in html            # the ◀ pane toggle survived
+
+
+def test_allele_uses_reference_base_without_md(tmp_path):
+    """SNPs are called against the FASTA even when the BAM has no MD tags."""
+    from allelescope.extract_mates import extract_mates
+    seq = "A" * 300
+    (tmp_path / "ref.fa").write_text(f">chr1\n{seq}\n", encoding="utf-8")
+    pysam.faidx(str(tmp_path / "ref.fa"))
+    header = pysam.AlignmentHeader.from_dict({"HD": {"VN": "1.6", "SO": "coordinate"},
+                                              "SQ": [{"SN": "chr1", "LN": 300}]})
+    bam = tmp_path / "in.bam"
+    with pysam.AlignmentFile(str(bam), "wb", header=header) as out:
+        for i, base in enumerate("AACC"):          # two reference reads, two with C at the site
+            r = pysam.AlignedSegment(header)
+            r.query_name = f"r{i}"
+            r.reference_id = 0
+            r.reference_start = 50
+            r.cigarstring = "100M"
+            s = list("A" * 100); s[49] = base
+            r.query_sequence = "".join(s)
+            r.query_qualities = pysam.qualitystring_to_array("I" * 100)
+            r.mapping_quality = 60
+            r.flag = 0                              # unpaired, no MD/NM tags
+            out.write(r)
+    pysam.index(str(bam))
+    counts = extract_mates(src_bam=str(bam), out_bam=str(tmp_path / "o.bam"), mates_bam=str(tmp_path / "m.bam"),
+                           chrom="chr1", start=100, end=100, ref_fasta=str(tmp_path / "ref.fa"))
+    assert dict(counts) == {"RA": 2, "MC": 2}
+
+
+def test_single_end_site_gets_served_bam(tmp_path):
+    """A site with no mates (single-end data) still produces the served .calmd.bam."""
+    seq = "ACGT" * 100
+    (tmp_path / "ref.fa").write_text(f">chr1\n{seq}\n", encoding="utf-8")
+    pysam.faidx(str(tmp_path / "ref.fa"))
+    header = pysam.AlignmentHeader.from_dict({"HD": {"VN": "1.6", "SO": "coordinate"},
+                                              "SQ": [{"SN": "chr1", "LN": len(seq)}]})
+    bam = tmp_path / "alignment.markdup.bam"
+    with pysam.AlignmentFile(str(bam), "wb", header=header) as out:
+        for i in range(3):
+            r = pysam.AlignedSegment(header)
+            r.query_name = f"se{i}"
+            r.reference_id = 0
+            r.reference_start = 100 + i
+            r.cigarstring = "80M"
+            r.query_sequence = seq[100 + i:180 + i]
+            r.query_qualities = pysam.qualitystring_to_array("I" * 80)
+            r.mapping_quality = 60
+            r.flag = 0
+            out.write(r)
+    pysam.index(str(bam))
+    assert process_variant(tmp_path, "chr1", 150, "ref.fa") == 0
+    served = tmp_path / "bam" / f"{site_stem('chr1', 150)}.calmd.bam"
+    assert served.exists() and Path(str(served) + ".bai").exists()
+    with pysam.AlignmentFile(str(served)) as f:
+        reads = list(f)
+    assert len(reads) == 3 and all(r.has_tag("BQ") and r.has_tag("XA") for r in reads)

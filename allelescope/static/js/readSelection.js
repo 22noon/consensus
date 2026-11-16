@@ -44,19 +44,22 @@ function updateReadList() {
 
             <div class="read-action-bar">
                 <button class="btn btn-primary btn-sm"
-                        onclick="IsolateSelectedReads()">
+                        onclick="IsolateSelectedReads()"
+                        title="Show only the selected reads (and their mates) at this site">
                     <i class="bi bi-funnel-fill me-1"></i>
-                    Retain
+                    Show only these
                 </button>
 
                 <button class="btn btn-warning btn-sm"
-                        onclick="filterSelectedReads()">
-                    <i class="bi bi-filter me-1"></i>
-                    Filter
+                        onclick="filterSelectedReads()"
+                        title="Hide the selected reads (and their mates) at this site">
+                    <i class="bi bi-eye-slash me-1"></i>
+                    Hide these
                 </button>
 
                 <button class="btn btn-outline-secondary btn-sm"
-                        onclick="exportSelectedReads()">
+                        onclick="exportSelectedReads()"
+                        title="Download the selected reads as a BAM file">
                     <i class="bi bi-download me-1"></i>
                     Export
                 </button>
@@ -78,12 +81,19 @@ function removeRead(readName) {
 }
 
 function clearReadList() {
-    if (AppState.selectedReads.size === 0 || confirm('Clear all selected reads?')) {
-        AppState.selectedReads.clear();
-        AppState.Token = "";
+    if (AppState.selectedReads.size === 0) return;
+    const saved = new Set(AppState.selectedReads);
+    const savedToken = AppState.Token;
+    AppState.selectedReads.clear();
+    AppState.Token = "";
+    updateReadList();
+    refreshCurrentView();
+    showToast(`Cleared ${saved.size} selected read(s)`, { action: { label: "Undo", onClick: () => {
+        saved.forEach(r => AppState.selectedReads.add(r));
+        AppState.Token = savedToken;
         updateReadList();
         refreshCurrentView();
-    }
+    } } });
 }
 
 function searchForRead(readName) {
@@ -91,7 +101,7 @@ function searchForRead(readName) {
     if (AppState.browser && AppState.browser.search) {
         AppState.browser.search(readName);
     } else {
-        alert(`Read name copied: ${readName}\nUse IGV's search box to find this read.`);
+        showToast(`Use IGV's search box to find ${readName}`);
     }
 }
 
