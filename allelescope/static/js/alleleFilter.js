@@ -129,13 +129,6 @@ function describeAllele(xa) {
 }
 
 /* Ask the server for the alleles observed at a site (null if it has no reads). */
-// Viewers built before sampling.js existed do not list it: load it here.
-if (typeof chooseSiteSample === "undefined") {
-    const script = document.createElement("script");
-    script.src = "/static/js/sampling.js";
-    document.head.appendChild(script);
-}
-
 async function fetchAlleles(site) {
     // Deep sites: ask (once) whether to show a subsample. See sampling.js.
     const sample = typeof chooseSiteSample === "function" ? await chooseSiteSample(site) : null;

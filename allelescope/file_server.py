@@ -407,6 +407,66 @@ def extract_bam(browser=None):
     return jsonify({"success": False}), 500
 
 
+def _vcf_text(value: str) -> str:
+    """Percent-encode the characters a VCF INFO value cannot hold."""
+    out = []
+    for ch in value:
+        if ch in "%;=,:" or ch in "\t\r\n" or ch == " ":
+            out.append(f"%{ord(ch):02X}")
+        else:
+            out.append(ch)
+    return "".join(out)
+
+
+def instance_vcf(serverpath: Path):
+    """The VCF an instance was built from (the bgzipped copy in its folder)."""
+    candidates = sorted(p for p in Path(serverpath).glob("*.vcf.gz")
+                        if not p.name.endswith(".reviewed.vcf.gz"))
+    return candidates[0] if candidates else None
+
+
+@app.route("/api/review_vcf", methods=["POST"])
+@app.route("/<path:browser>/api/review_vcf", methods=["POST"])
+def review_vcf(browser=None):
+    """
+    The instance's VCF with the browser's review added to each record:
+        INFO/REVIEW       confirmed | doubtful | artefact
+        INFO/REVIEW_NOTE  the note, percent-encoded (%3B for ";", %20 for space ...)
+    Body: {"reviews": {"chrom:pos": {"s": status, "n": note}, ...}}
+    """
+    serverpath = DATA_DIR if browser is None else DATA_DIR / browser
+    src = instance_vcf(serverpath)
+    if src is None:
+        return jsonify({"error": "This instance has no VCF"}), 404
+    reviews = (request.get_json(silent=True) or {}).get("reviews") or {}
+
+    with pysam.VariantFile(str(src)) as vin:
+        header = vin.header.copy()
+        if "REVIEW" not in header.info:
+            header.add_meta("INFO", items=[("ID", "REVIEW"), ("Number", "1"), ("Type", "String"),
+                                           ("Description", "Allelescope review: confirmed, doubtful or artefact")])
+        if "REVIEW_NOTE" not in header.info:
+            header.add_meta("INFO", items=[("ID", "REVIEW_NOTE"), ("Number", "1"), ("Type", "String"),
+                                           ("Description", "Allelescope review note (percent-encoded)")])
+        with tempfile.TemporaryDirectory() as tmp:
+            out_path = Path(tmp) / "reviewed.vcf"
+            with pysam.VariantFile(str(out_path), "w", header=header) as vout:
+                for rec in vin:
+                    rec.translate(vout.header)
+                    r = reviews.get(f"{rec.chrom}:{rec.pos}") or {}
+                    status = r.get("s")
+                    note = (r.get("n") or "").strip()
+                    if status in ("confirmed", "doubtful", "artefact"):
+                        rec.info["REVIEW"] = status
+                    if note:
+                        rec.info["REVIEW_NOTE"] = _vcf_text(note)
+                    vout.write(rec)
+            data = out_path.read_bytes()
+
+    name = src.name[:-len(".vcf.gz")] + ".reviewed.vcf"
+    return send_file(io.BytesIO(data), mimetype="text/plain", as_attachment=True, download_name=name)
+
+
 @app.route("/api/depth")
 @app.route("/<path:browser>/api/depth")
 def site_depth(browser=None):

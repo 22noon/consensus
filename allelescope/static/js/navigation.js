@@ -53,6 +53,9 @@ async function selectVariantRow(row, variant, knownAlleles) {
     const alleles = knownAlleles !== undefined ? knownAlleles : await fetchAlleles(site);
     if (seq !== variantSelectionSeq) return;   // another row was selected meanwhile
 
+    // The observed AF is known now.
+    if (typeof refreshVariantRow === "function") refreshVariantRow(row);
+
     if (alleles && alleles.length > 0) {
         buildAlleleFilterPanel(variant, site, alleles);
     } else {
