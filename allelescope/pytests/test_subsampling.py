@@ -149,3 +149,22 @@ def test_depth_endpoint_and_sampled_extract(client):
     assert bam.status_code == 200
 
     assert client.get(f"/inst/api/depth?chrom={CHROM}&pos=abc").status_code == 400
+
+
+def test_concurrent_requests_for_one_view(client):
+    """IGV asks for a BAM and its index together; a site that is not prepared
+    yet must be prepared once and every request must succeed."""
+    import threading
+    q = (f"Chrom={CHROM}&Pos={SITE}&Ref=ref.fa&Flagf=0&FlagF=0&Tagf=0&TagF=0"
+         "&Token=&XAFilter=&minMapQ=5")
+    codes = []
+
+    def get(kind):
+        codes.append(client.get(f"/inst/api/{kind}?{q}").status_code)
+
+    threads = [threading.Thread(target=get, args=(k,)) for k in ["bam", "bai"] * 6]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert codes == [200] * 12

@@ -44,19 +44,22 @@ function updateReadList() {
 
             <div class="read-action-bar">
                 <button class="btn btn-primary btn-sm"
-                        onclick="IsolateSelectedReads()">
+                        onclick="IsolateSelectedReads()"
+                        title="Show only the selected reads (and their mates) at this site">
                     <i class="bi bi-funnel-fill me-1"></i>
-                    Retain
+                    Show only these
                 </button>
 
                 <button class="btn btn-warning btn-sm"
-                        onclick="filterSelectedReads()">
-                    <i class="bi bi-filter me-1"></i>
-                    Filter
+                        onclick="filterSelectedReads()"
+                        title="Hide the selected reads (and their mates) at this site">
+                    <i class="bi bi-eye-slash me-1"></i>
+                    Hide these
                 </button>
 
                 <button class="btn btn-outline-secondary btn-sm"
-                        onclick="exportSelectedReads()">
+                        onclick="exportSelectedReads()"
+                        title="Download the selected reads as a BAM file">
                     <i class="bi bi-download me-1"></i>
                     Export
                 </button>

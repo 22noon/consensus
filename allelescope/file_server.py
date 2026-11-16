@@ -13,6 +13,7 @@ import pysam
 import sys
 import re
 import hashlib
+import threading
 import json
 from pathlib import Path
 
@@ -116,8 +117,25 @@ def build_cache_key(*args):
     print(f"Cache key: {key}")
     return hashlib.md5(key).hexdigest()
 
+# IGV asks for a BAM and its index at the same time, and quick filter changes
+# repeat requests, so one cached file can be requested by several threads at
+# once. Each cache entry is built under its own lock, into temporary files
+# that are renamed into place when complete.
+_cache_locks = {}
+_cache_locks_guard = threading.Lock()
+
+
+def _cache_lock(key):
+    with _cache_locks_guard:
+        return _cache_locks.setdefault(key, threading.Lock())
+
+
 def processed_bam(serverpath, Chrom, Pos, Ref, sample=None):
-    return process_variant(serverpath, Chrom, Pos, Ref, sample=sample)
+    # One preparation per site at a time; a second request waits and then
+    # finds the site prepared.
+    key = f"site|{Path(serverpath).resolve()}|{Chrom}|{Pos}|{site_sample(sample)}"
+    with _cache_lock(key):
+        return process_variant(serverpath, Chrom, Pos, Ref, sample=sample)
 
 
 def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
@@ -141,11 +159,22 @@ def build_filtered_bam(serverpath, cache_dir, filename, cache_key, params):
     if bam_path.exists() and bai_path.exists():
         return bam_path
 
-    header, reads = get_filtered_reads_bam(serverpath, filename, **params)
-    with pysam.AlignmentFile(str(bam_path), "wb", header=header) as out:
-        for read in reads:
-            out.write(read)
-    pysam.index(str(bam_path))
+    with _cache_lock(str(bam_path)):
+        if bam_path.exists() and bai_path.exists():
+            return bam_path
+        tmp_bam = cache_dir / f"{cache_key}.{threading.get_ident()}.tmp.bam"
+        tmp_bai = Path(f"{tmp_bam}.bai")
+        try:
+            header, reads = get_filtered_reads_bam(serverpath, filename, **params)
+            with pysam.AlignmentFile(str(tmp_bam), "wb", header=header) as out:
+                for read in reads:
+                    out.write(read)
+            pysam.index(str(tmp_bam), str(tmp_bai))
+            tmp_bam.replace(bam_path)
+            tmp_bai.replace(bai_path)
+        finally:
+            tmp_bam.unlink(missing_ok=True)
+            tmp_bai.unlink(missing_ok=True)
     return bam_path
 
 

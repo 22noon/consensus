@@ -304,6 +304,33 @@ function addColourKey() {
     igvDiv.before(key);
 }
 
+/* ------------------------------------------------------------------------
+ * Read selection sits above the IGV view, where reads are clicked
+ * --------------------------------------------------------------------- */
+function moveReadSelection() {
+    const list = document.getElementById("highlighted-reads-list");
+    const card = list?.closest(".card");
+    const anchor = document.getElementById("colour-key") || document.getElementById("igv-div");
+    if (!card || !anchor || card.id === "read-selection-card") return;
+    card.id = "read-selection-card";
+    card.classList.remove("mb-3");
+    card.classList.add("mb-2");
+    const hint = card.querySelector("p.text-muted");
+    const title = card.querySelector("h6");
+    if (title) {
+        title.textContent = "Selected reads";
+        title.title = "Click reads in the IGV view to select them, or type a read name";
+    }
+    if (hint) hint.remove();
+    const input = document.getElementById("highlight-read-name");
+    if (input) {
+        input.placeholder = "Click reads in IGV, or type a read name";
+        input.addEventListener("keydown", e => { if (e.key === "Enter") addReadToList(); });
+    }
+    if (!list.children.length) list.textContent = "";
+    anchor.before(card);
+}
+
 function initInterface() {
     if (window._uiInitDone) return;
     window._uiInitDone = true;
@@ -311,6 +338,7 @@ function initInterface() {
     addFilterExportItem();
     addControlTooltips();
     addColourKey();
+    moveReadSelection();
 }
 
 if (document.readyState === "loading") {

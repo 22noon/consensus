@@ -610,6 +610,7 @@ function updateFilterSummary() {
     active.push(...extraActiveFilters());
 
     if (typeof syncTriStateFilters === "function") syncTriStateFilters();
+    if (typeof recordViewInUrl === "function") recordViewInUrl(false);
     const countBadge = document.getElementById("filter-active-count");
     if (countBadge) {
         countBadge.textContent = active.length ? `${active.length} active` : "";

@@ -245,6 +245,9 @@ function buildAlleleFilterPanel(variant, site, alleles) {
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <strong class="small">Alleles at ${chrom}:${pos}</strong>
                 <div class="d-flex gap-1">
+                    <button class="btn btn-outline-secondary btn-sm py-0" type="button"
+                            onclick="copyViewLink()" title="Copy a link to this view (site, filters, allele filter)">
+                        <i class="bi bi-link-45deg"></i></button>
                     <button class="btn btn-outline-secondary btn-sm py-0"
                             onclick="applyDynamicAlleleFilter()">Filter</button>
                     <button class="btn btn-outline-secondary btn-sm py-0"

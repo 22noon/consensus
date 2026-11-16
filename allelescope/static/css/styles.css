@@ -421,3 +421,26 @@ tr.variant-row:hover .row-delete, tr.variant-row.selected .row-delete, .row-dele
 .colour-key .key-swatch { display: inline-block; width: 0.75rem; height: 0.6rem; border-radius: 2px; }
 .colour-key .key-line { display: inline-block; width: 0.9rem; height: 2px; background: #000; }
 .colour-key .key-sep { color: #ced4da; }
+
+/* Read selection bar above IGV (ui.js) */
+#read-selection-card .card-body {
+    display: grid; grid-template-columns: auto minmax(10rem, 1fr) auto;
+    gap: 0.25rem 0.5rem; align-items: center; padding: 0.35rem 0.5rem !important;
+}
+#read-selection-card h6 { margin: 0 !important; font-size: 0.85rem; white-space: nowrap; }
+#read-selection-card .input-group, #read-selection-card .d-flex { margin: 0 !important; }
+#read-selection-card #highlighted-reads-list { grid-column: 1 / -1; }
+#read-selection-card #highlighted-reads-list:empty { display: none; }
+#read-selection-card #highlighted-reads-list {
+    max-height: none !important; display: flex; flex-wrap: wrap; align-items: center;
+    gap: 0.35rem 0.6rem; padding: 0.3rem 0.4rem !important;
+}
+#read-selection-card .selected-header { padding: 0; background: none; border: 0; font-size: 0.8rem; }
+#read-selection-card .read-list {
+    display: flex; flex-wrap: wrap; gap: 0.25rem; padding: 0; max-height: 4.2rem; flex: 1 1 12rem;
+}
+#read-selection-card .read-item {
+    border: 0; padding: 0.05rem 0.5rem; background: #e9ecef; border-radius: 1rem; font-size: 0.75rem;
+}
+#read-selection-card .read-action-bar { position: static; padding: 0; background: none; border: 0; gap: 0.35rem; }
+#read-selection-card .read-action-bar .btn { flex: none; border-radius: 0.3rem; padding: 0.1rem 0.5rem; font-size: 0.8rem; }

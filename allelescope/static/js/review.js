@@ -301,7 +301,10 @@ function _typingIn(target) {
     if (!target) return false;
     if (target.isContentEditable) return true;
     const tag = target.tagName;
-    return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+    if (tag === "TEXTAREA" || tag === "SELECT") return true;
+    if (tag !== "INPUT") return false;
+    // Tick boxes, radio buttons and buttons keep the shortcuts working.
+    return !["checkbox", "radio", "button", "submit", "range"].includes(target.type);
 }
 
 function onReviewKey(e) {
@@ -407,4 +410,157 @@ if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initReview);
 } else {
     initReview();
+}
+
+/* ------------------------------------------------------------------------
+ * Linkable views
+ *
+ * The address records what is shown, e.g.
+ *   .../demo/#v=demo_seg1:2450&on=retain-duplicates,filter-tag-f1r2&min-mapq=20&xa=MC&s=2000
+ *     v    the selected variant (chrom:pos as in the variant list)
+ *     on   ticked flag / read-type boxes (filter-* require, retain-* exclude)
+ *     <id> numeric limits and the strand choice, by control id
+ *     xa   allele filter
+ *     s    subsample size (read pairs) of the site
+ * Opening such a link shows that view; Back and Forward move between the
+ * variants visited.
+ * --------------------------------------------------------------------- */
+
+var _restoringView = false;
+
+function currentViewParams() {
+    const v = AppState.currentSelection?.variant;
+    if (!v) return null;
+    const params = new URLSearchParams();
+    params.set("v", `${v.chrom}:${v.pos}`);
+    const on = [];
+    document.querySelectorAll("[data-filter-id]").forEach(el => {
+        const id = el.dataset.filterId;
+        if (el.type === "checkbox") {
+            if (el.checked) on.push(id);
+        } else if (el.tagName === "SELECT") {
+            if (el.value && el.value !== el.options[0]?.value) params.set(id, el.value);
+        } else if (String(el.value).trim() !== "") {
+            params.set(id, String(el.value).trim());
+        }
+    });
+    if (on.length) params.set("on", on.join(","));
+    if (AppState.activeXAFilter?.size) params.set("xa", [...AppState.activeXAFilter].join(","));
+    const site = alleleSite(v);
+    const sample = typeof siteSampleParam === "function" ? siteSampleParam(site.chrom, site.pos) : "";
+    if (sample) params.set("s", sample);
+    return params;
+}
+
+function recordViewInUrl(newEntry) {
+    if (_restoringView) return;
+    const params = currentViewParams();
+    if (!params) return;
+    const hash = "#" + params.toString().replace(/%3A/gi, ":").replace(/%2C/gi, ",");
+    if (hash === window.location.hash) return;
+    const sameVariant = new URLSearchParams(window.location.hash.slice(1)).get("v") === params.get("v");
+    // A filter change only updates the entry of the variant already in the
+    // address; moving to another variant is recorded by the selection.
+    if (!newEntry && !sameVariant) return;
+    const state = { allelescope: true };
+    if (newEntry && !sameVariant) history.pushState(state, "", hash);
+    else history.replaceState(state, "", hash);
+}
+
+async function copyViewLink() {
+    recordViewInUrl(false);
+    try {
+        await navigator.clipboard.writeText(window.location.href);
+        showToast("Link to this view copied");
+    } catch (e) {
+        showToast("Copy the address from the browser's address bar");
+    }
+}
+
+function _findVariantRow(chrom, pos) {
+    return [...document.querySelectorAll("#chromTabContent tr.variant-row")]
+        .find(r => r._variant && r._variant.chrom === chrom && r._variant.pos === pos);
+}
+
+async function restoreViewFromUrl() {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const target = params.get("v");
+    if (!target) return;
+    const cut = target.lastIndexOf(":");
+    const chrom = target.slice(0, cut);
+    const pos = parseInt(target.slice(cut + 1), 10);
+    if (!chrom || !(pos > 0)) return;
+
+    _restoringView = true;
+    try {
+        // Filters exactly as in the link.
+        const on = new Set((params.get("on") || "").split(",").filter(Boolean));
+        document.querySelectorAll("[data-filter-id]").forEach(el => {
+            const id = el.dataset.filterId;
+            if (el.type === "checkbox") el.checked = on.has(id);
+            else if (el.tagName === "SELECT") el.value = params.get(id) || el.options[0]?.value || "";
+            else el.value = params.get(id) || "";
+        });
+        updateFilterStateFromUI();
+
+        let row = _findVariantRow(chrom, pos);
+        if (!row) {
+            if (!(AppState.VariantList || {})[chrom]) {
+                showToast(`${chrom} is not a sequence of this instance`, { kind: "danger" });
+                return;
+            }
+            const v = { chrom, pos, ref: "-", alt: "-", info: "Manual" };
+            AppState.variants.push(v);
+            recordVariantAdded(v);
+            (AppState.manualVariants[chrom] = AppState.manualVariants[chrom] || new Set()).add(pos);
+            buildVariantTabs(AppState.variants, chrom);
+            row = _findVariantRow(chrom, pos);
+            showToast(`Added ${chrom}:${pos} from the link`);
+        }
+        if (!row) return;
+
+        const v = row._variant;
+        const site = alleleSite(v);
+        const sample = parseInt(params.get("s") || "", 10);
+        if (typeof setSiteSample === "function" && (sample > 0 || params.has("v"))) {
+            setSiteSample(site, sample > 0 ? sample : null);
+        }
+
+        const pane = row.closest(".tab-pane");
+        const btn = pane && document.getElementById(`tab-${pane.id}`);
+        if (btn && !btn.classList.contains("active")) bootstrap.Tab.getOrCreateInstance(btn).show();
+        row.scrollIntoView({ block: "nearest" });
+        await selectVariantRow(row, v);
+
+        const xa = (params.get("xa") || "").split(",").filter(Boolean);
+        if (xa.length) {
+            AppState.activeXAFilter = new Set(xa);
+            AppState.alleleFilterSite = siteKey(site);
+            document.querySelectorAll(".allele-dynamic-check").forEach(cb => { cb.checked = xa.includes(cb.dataset.xa); });
+        }
+        applyFilters();
+    } finally {
+        _restoringView = false;
+    }
+}
+
+function initLinkedViews() {
+    window.addEventListener("popstate", () => restoreViewFromUrl());
+    if (!window.location.hash.includes("v=")) return;
+    // Wait until IGV and the variant table are ready.
+    const start = Date.now();
+    const timer = setInterval(() => {
+        if (AppState.browser && document.querySelector("#chromTabContent tr.variant-row")) {
+            clearInterval(timer);
+            restoreViewFromUrl();
+        } else if (Date.now() - start > 30000) {
+            clearInterval(timer);
+        }
+    }, 200);
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initLinkedViews);
+} else {
+    initLinkedViews();
 }

@@ -50,7 +50,11 @@ async function selectVariantRow(row, variant, knownAlleles) {
     // The first request for a site makes the server extract its reads. Wait
     // for it before loading the track so the site is only processed once.
     const seq = ++variantSelectionSeq;
+    const preparing = knownAlleles === undefined
+        ? setTimeout(() => { if (seq === variantSelectionSeq) showPreparingPanel(site); }, 250)
+        : null;
     const alleles = knownAlleles !== undefined ? knownAlleles : await fetchAlleles(site);
+    clearTimeout(preparing);
     if (seq !== variantSelectionSeq) return;   // another row was selected meanwhile
 
     // The observed AF is known now.
@@ -65,4 +69,21 @@ async function selectVariantRow(row, variant, knownAlleles) {
     const flankSize = parseInt(document.getElementById('flank-size')?.value) || 100;
     navigateToVariant(variant, flankSize);
     updateFilterSummary();
+    if (typeof recordViewInUrl === "function") recordViewInUrl(true);
+}
+
+/* Shown in place of the allele panel while a site is being prepared. */
+function showPreparingPanel(site) {
+    removeAlleleFilterPanel();
+    const sample = typeof siteSampleParam === "function" ? siteSampleParam(site.chrom, site.pos) : "";
+    const panel = document.createElement("div");
+    panel.id = "allele-filter-panel";
+    panel.className = "card shadow-sm border-0 mb-3 mt-2";
+    panel.innerHTML = `
+        <div class="card-body py-2 small d-flex align-items-center gap-2">
+            <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+            <span>Preparing reads at ${site.chrom}:${site.pos}${sample ? ` (subsample of ${Number(sample).toLocaleString()} read pairs)` : ""}…
+            <span class="text-muted">The first visit to a site takes longest.</span></span>
+        </div>`;
+    document.querySelector('.card.shadow-sm.mt-3')?.insertAdjacentElement('afterend', panel);
 }
