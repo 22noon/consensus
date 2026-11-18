@@ -1,0 +1,16 @@
+flowchart TD
+  A["Per-site read set<br/>reads crossing the site + their mates + split partners"] --> SEL{"Selected reads<br/>applied?"}
+  SEL -- "Show only these" --> R1["Keep only the selected reads"]
+  SEL -- "Hide these" --> R2["Drop the selected reads"]
+  SEL -- "no" --> F1
+  R1 --> F1
+  R2 --> F1
+  F1["Flags set to require + Strand<br/>read must carry EVERY one"] --> F2["Flags set to exclude<br/>read must carry NONE of them"]
+  F2 --> F3["Read types / orientation set to require<br/>EVERY one set"]
+  F3 --> F4["Read types / orientation set to exclude<br/>NONE set"]
+  F4 --> F5["Mapping quality<br/>at or above the minimum"]
+  F5 --> F6["Edit distance<br/>within Min and Max"]
+  F6 --> F7["Allele filter<br/>read's allele is one of the chosen alleles"]
+  F7 --> F8["Soft-clip length<br/>within Min and Max"]
+  F8 --> F9["BAQ at the site<br/>within Min and Max, decided per read pair"]
+  F9 --> OUT(["Reads drawn in the Spanning Reads Only track"])

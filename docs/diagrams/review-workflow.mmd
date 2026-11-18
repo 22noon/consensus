@@ -1,0 +1,15 @@
+flowchart TD
+  A(["Press N: next variant without a status"]) --> B["Read the allele panel:<br/>AF, strand split, BQ, MQ, any ⚠ strand mark"]
+  B --> C{"ALT allele on<br/>both strands?"}
+  C -- "no" --> X1["Possible strand artefact:<br/>press X"]
+  C -- "yes" --> D["Exclude duplicates and mates"]
+  D --> E{"Allele still<br/>supported?"}
+  E -- "no" --> X2["Support came from duplicates:<br/>press X or D"]
+  E -- "yes" --> F["Press the ALT allele's number<br/>to see only its reads"]
+  F --> G{"Supporting reads clean?<br/>(edit distance, soft clips,<br/>pairing, orientation)"}
+  G -- "no" --> X3["Shift-click the odd reads, Export them;<br/>press D and E to note why"]
+  G -- "yes" --> OK(["Looks real: press C"])
+  X1 --> N["Reset filters if needed, then press N"]
+  X2 --> N
+  X3 --> N
+  OK --> N

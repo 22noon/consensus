@@ -1,0 +1,7 @@
+flowchart LR
+  IN["<b>1 · Your inputs</b><br/>sample.bam<br/>reference.fa<br/>calls.vcf.gz (optional)"]
+  BUILD["<b>2 · build_variant_browser</b><br/>once per sample<br/><br/>BAM: collate, fixmate, sort,<br/>markdup, index<br/>FASTA: copy, faidx<br/>VCF: copy, bgzip, tabix<br/>write the viewer page"]
+  INST["<b>3 · Instance folder</b><br/>e.g. Browsers/sampleA/<br/><br/>alignment.markdup.bam + .bai<br/>reference.fa + .fai<br/>calls.vcf.gz + .tbi<br/>interactive_variants.html<br/>config.js"]
+  SRV["<b>4 · start_server</b><br/>--data-dir Browsers<br/>--port 8000"]
+  WEB["<b>5 · Web browser</b><br/>http://localhost:8000/sampleA/"]
+  IN --> BUILD --> INST --> SRV --> WEB
