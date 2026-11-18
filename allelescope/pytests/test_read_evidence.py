@@ -51,8 +51,9 @@ def test_read_evidence_fields():
     r.next_reference_id = 0
     r.next_reference_start = 300
     r.template_length = -350
-    (rev, mq, bq, end_dist, other, ambiguous, chimeric, clipped, isize, f1r2, dup) = \
+    (rev, mq, bq, end_dist, other, ambiguous, chimeric, clipped, isize, f1r2, dup, a_start, a_end) = \
         _read_evidence(r, 102, "MT")
+    assert (a_start, a_end) == (101, 195)
     assert rev and mq == 0 and bq == 40
     assert end_dist == 2
     assert other == 3                     # NM 4 minus the SNV itself
@@ -180,3 +181,38 @@ def test_review_vcf_carries_read_flags(tmp_path, monkeypatch):
     assert "READ_FLAGS=read-end,mismatches" in rec10 and "REVIEW=artefact" in rec10
     assert "bad" not in rec10                      # malformed names are dropped
     assert "READ_FLAGS" not in rec20
+
+
+def test_end_distance_uses_the_better_placed_mate(tmp_path):
+    """Both mates cross the site: near the end of read 1, mid-way in read 2."""
+    seq = "ACGT" * 250
+    (tmp_path / "ref.fa").write_text(f">c\n{seq}\n", encoding="utf-8")
+    pysam.faidx(str(tmp_path / "ref.fa"))
+    header = pysam.AlignmentHeader.from_dict({"HD": {"VN": "1.6", "SO": "coordinate"},
+                                              "SQ": [{"SN": "c", "LN": len(seq)}]})
+    site0 = 500
+    reads = []
+    for i in range(8):
+        for first, start in ((True, site0 - 97), (False, site0 - 50)):
+            a = pysam.AlignedSegment(header)
+            a.query_name = f"f{i}"
+            a.reference_id = 0
+            a.reference_start = start
+            a.cigarstring = "100M"
+            a.query_sequence = seq[start:start + 100]
+            a.query_qualities = pysam.qualitystring_to_array("?" * 100)
+            a.mapping_quality = 60
+            a.flag = 0x1 | 0x2 | (0x40 | 0x20 if first else 0x80 | 0x10)
+            a.next_reference_id = 0
+            a.next_reference_start = site0 - 50 if first else site0 - 97
+            a.template_length = 147 if first else -147
+            reads.append(a)
+    bam = tmp_path / "alignment.markdup.bam"
+    with pysam.AlignmentFile(str(bam), "wb", header=header) as out:
+        for r in sorted(reads, key=lambda r: r.reference_start):
+            out.write(r)
+    pysam.index(str(bam))
+    assert process_variant(tmp_path, "c", site0 + 1, "ref.fa") == 0
+    ev = json.loads((tmp_path / "bam" / f"{site_stem('c', site0 + 1)}.bam.evidence.json").read_text())
+    ref = ev["R" + seq[site0]]
+    assert ref["n"] == 8 and ref["near_end"] == 0 and ref["end_median"] == 49

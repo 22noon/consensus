@@ -1,6 +1,6 @@
 # Allelescope User Manual
 
-*Covers Allelescope 0.1.02 as on the `main` branch of `22noon/consensus` (pull requests #1 to #8) and the read-evidence warnings. Revised 18 November 2026. Also available as a [web page](https://22noon.github.io/consensus/) and a [PDF](docs/allelescope-user-manual.pdf).*
+*Covers Allelescope 0.1.02 as on the `main` branch of `22noon/consensus` (pull requests #1 to #10), with gene effects and primer sites. Revised 18 November 2026. Also available as a [web page](https://22noon.github.io/consensus/) and a [PDF](docs/allelescope-user-manual.pdf).*
 
 Allelescope is a web-based viewer for checking variant calls against the reads behind them. You pick a site, and Allelescope shows the reads that cross it, together with their mates and split-read partners, in an embedded IGV view. You can narrow those reads down by flag, pairing, strand, edit distance, soft clipping or observed allele, pick out individual reads to keep, hide or download, and record a verdict for each variant as you go.
 
@@ -151,15 +151,20 @@ build_variant_browser -b sample.bam -r reference.fa -v calls.norm.vcf.gz -o Brow
 | `-o`, `--out-dir` | `./out_dir` | Instance folder to create |
 | `-g`, `--genome-name` | first contig in the VCF, otherwise first sequence in the BAM header | Name shown for the reference |
 | `-t`, `--threads` | `10` | Threads for samtools |
+| `-a`, `--annotation` | none | Gene annotation, GFF3 or GTF (may be gzipped), for effects on the protein ([section 9.4](#94-gene-effects-and-primers)) |
+| `-p`, `--primers` | none | Amplicon primer scheme, BED, to mark primer sites ([section 9.4](#94-gene-effects-and-primers)) |
+| `--bam-processing` | `auto` | `auto`: check the BAM and run only the steps it still needs; `full`: always run all of step 3; `skip`: use a coordinate-sorted BAM as it is |
+| `--link` | off | When the BAM needs no processing, hard-link it into the instance instead of copying it (same file system only) |
 
 The command prints each stage as it runs and stops at the first error. It:
 
 1. checks that the input files and tools exist;
 2. works out the genome name;
-3. runs the BAM through `samtools collate → fixmate → sort → markdup` and indexes the result, so that mate information is consistent and duplicates are flagged;
+3. runs the BAM through `samtools collate → fixmate → sort → markdup` and indexes the result, so that mate information is consistent and duplicates are flagged. With the default `--bam-processing auto` it first reads the BAM header and skips the steps already done: a BAM that is sorted and duplicate-marked is just copied;
 4. copies the reference and indexes it;
 5. copies the VCF, compresses it if needed, and indexes it;
-6. writes the viewer page.
+6. copies the annotation and primer scheme, if given, as `annotation.gff3` (or `.gtf`) and `primers.bed`, and warns if their sequence names do not match the reference;
+7. writes the viewer page.
 
 The instance folder then contains:
 
@@ -171,6 +176,8 @@ Browsers/sampleA/
 ├── reference.fa.fai
 ├── calls.norm.vcf.gz            copy of your VCF (only if -v was given)
 ├── calls.norm.vcf.gz.tbi
+├── annotation.gff3              gene annotation (only if -a was given)
+├── primers.bed                  primer scheme (only if -p was given)
 ├── config.js                    settings for the viewer page
 └── interactive_variants.html    the viewer page
 ```
@@ -254,7 +261,7 @@ The left pane is where you choose sites, record your review and set filters. The
 | # | Part | What it is for |
 |---|---|---|
 | 1 | Header gear | Cached reads and what your browser has saved ([section 13](#13-housekeeping-caches-saved-lists-and-presets)) |
-| 2 | **Jump to position** | Add positions that are not in the VCF ([section 9.6](#96-add-a-position-that-is-not-in-the-vcf)) |
+| 2 | **Jump to position** | Add positions that are not in the VCF ([section 9.7](#97-add-a-position-that-is-not-in-the-vcf)) |
 | 3 | Variants gear | How the list of sequences is shown, empty sequences, saved variant lists |
 | 4 | Variant toolbar | Search, status filter, review download, keyboard shortcuts ([section 7](#7-reviewing-a-list-of-variants)) |
 | 5 | Sequence tabs | One tab per reference sequence, with its number of variants ([section 8](#8-genomes-with-many-sequences)) |
@@ -339,6 +346,7 @@ The tags are explained in [Appendix A](#appendix-a-reference-tables).
 |---|---|
 | Status icon | Your review status: an empty circle (not reviewed), Confirmed, Doubtful or Artefact ([section 7](#7-reviewing-a-list-of-variants)) |
 | **Pos**, **Ref**, **Alt** | The VCF record. Long alleles are shortened; point at one to see it in full |
+| **Effect** | Only with a gene annotation or primer scheme: the effect on the protein, for example `polA S328Y`, and `primer` if the variant lies in a primer ([section 9.4](#94-gene-effects-and-primers)) |
 | **AF** | The allele fraction from the VCF. If the VCF has none, the fraction seen in the reads appears *in italics* once you have opened the site. Point at a VCF value to see the fraction in the reads |
 | Flag | Read-evidence warnings once the site has been opened: a green tick, or ⚠ and their number ([section 9.3](#93-read-evidence)) |
 | **Note** | Your note, or the VCF `INFO` summary (for example `DP=87`) until you write one. Point at the cell to see the VCF `INFO` |
@@ -393,7 +401,7 @@ Going through a list is fastest with the keyboard. Press **?** (or the keyboard 
 | **C**, **D**, **X** | Mark Confirmed, Doubtful, Artefact; press again to clear |
 | **U** | Clear the status |
 | **E** | Edit the note |
-| **1** – **9** | Show only the reads with that allele of the allele panel ([section 9.5](#95-filter-by-allele)) |
+| **1** – **9** | Show only the reads with that allele of the allele panel ([section 9.6](#96-filter-by-allele)) |
 | **0** | Show reads with any allele |
 | **/** | Search the variant list |
 | **?** | Show or hide the list of shortcuts |
@@ -580,17 +588,67 @@ The warnings are hints, not verdicts: a real variant near the end of an amplicon
 
 The warnings are also in both downloads ([section 7.5](#75-download-the-review)): the `read_flags` column of the review table, and `INFO/READ_FLAGS` in the VCF, for example `READ_FLAGS=ambiguous,mismatches`.
 
-### 9.4 Insertions and deletions
+### 9.4 Gene effects and primers
+
+Give the build a gene annotation (`-a`) and, for amplicon sequencing, the primer scheme (`-p`), and Allelescope shows what each variant does to the protein and marks variants and reads in primer sites. You can also add the files to an existing instance: copy them into its folder as `annotation.gff3` (or `annotation.gtf`) and `primers.bed`, then reload the page. No rebuild and no restart is needed.
+
+![Variant table with effects](docs/images/effects-table.png)
+
+*Figure 28. A synthetic virus with one gene on each strand (`polA` on +, `capB` on −) and a tiled amplicon scheme. Each variant shows its effect, coloured by kind, and `primer` where it lies in a primer.*
+
+**Effects.** For a variant in a coding sequence (`CDS` features), Allelescope translates the codons before and after the change, on whichever strand the gene is on:
+
+| Kind | Example | Colour |
+|---|---|---|
+| missense | `polA S328Y` | yellow |
+| synonymous | `polA A120A` | grey |
+| stop gained, stop lost, start lost | `polA G200*` | red |
+| frameshift | `polA L300fs` (at codon 300) | red |
+| in-frame insertion or deletion | `capB M150ins1` (one codon inserted after codon 150), `…del2` | purple |
+| non-coding | the variant is in no CDS of the annotation | plain text |
+
+Codons are numbered from the start of the CDS (amino acid 1 is the start codon). A CDS written as several lines with the same `ID` is joined in order, which covers spliced genes and ribosomal slippage. For example, coronavirus ORF1ab is written as two parts that overlap by one base; a variant on that base changes a codon in each frame and shows both changes. When two CDSs have the same gene name (ORF1a and ORF1ab, say), the product is added to tell them apart. A CDS with a `transl_table` attribute is translated with that genetic code (1, 2, 3, 4, 5 and 11 are known).
+
+In the allele panel, every allele at the site, not only the ALT of the VCF, shows its effect under its strand line. This also works for positions added by hand, and it shows what minority variants do.
+
+Point at an effect for the full text. Type a gene name, a change (`S328Y`) or a kind (`missense`, `frameshift`) in the search box above the table to list only those variants.
+
+The annotation must use the reference's sequence names. If none match (for example `MN908947.3` in the reference and `NC_045512.2` in the GFF), the build warns and the page shows the warning when it opens.
+
+**Primers.** The primer scheme is a BED file with a line per primer: sequence, start, end, name, and optionally pool and strand (`+` for left primers, `-` for right). Without a strand column, names containing `LEFT` or `RIGHT` are used. ARTIC-style `.primer.bed` files work as they are.
+
+In amplicon data, the first bases of a read that starts at a left primer, and the last bases of a read that ends at a right primer, are copies of the primer oligo, not of the sample. Unless your pipeline trimmed the primers, those bases always show the reference (or whatever the primer says). Allelescope counts, for each allele, how many of its reads have primer sequence at the site. A read counts if its aligned part starts in a left primer covering the site, or ends in a right primer covering it. Reads with trimmed primers do not count, because their alignment starts after the primer.
+
+When the site lies in a primer, the allele panel says so and gives the share of reads with primer sequence, and the read-evidence table gets a **Primer sequence** row. Two warnings can appear:
+
+![A real variant hidden by primer reads](docs/images/primer-masked.png)
+
+*Figure 29. Primer-masked: at `virus:1083` every reference read is from amplicon 3, ending in its right primer, and every ALT read is from amplicon 4, which crosses the primer region with real sequence. The variant is in every sample molecule, but only half the reads show it.*
+
+![An allele that exists only in primer sequence](docs/images/primer-artefact.png)
+
+*Figure 30. Primer: at `virus:1361` the ALT allele is seen only in reads that start in the left primer of amplicon 5, which carries a different base. Reads from amplicon 4 crossing the same position show the reference.*
+
+| Warning | Shown when | Means |
+|---|---|---|
+| ⚠ primer | at least half of the allele's reads have primer sequence at the site, and at least twice the share of the baseline's (Fisher p < 0.01) | The allele may come from the primers, not the sample |
+| ⚠ primer-masked | at least half of the baseline's reads have primer sequence at the site, and at most half that share of the allele's | Primer reads hide the allele: its true share is higher. The warning gives its share among reads without primer sequence |
+
+At a primer site the reads of different alleles often come from different amplicons, one ending in its primer and the next crossing it. They then differ in strand and pair orientation by design, so when at least 20 % of the allele's or the baseline's reads have primer sequence there, the strand and orientation warnings are left out.
+
+**In the downloads**, the review table has `effect` and `primers` columns, and the VCF gets `INFO/EFFECT` (for example `EFFECT=polA:S328Y:missense`, one entry per ALT and gene) and `INFO/PRIMER`. Unlike the read warnings, these are filled in for every variant, opened or not.
+
+### 9.5 Insertions and deletions
 
 A VCF gives the base *before* an insertion or deletion as its position. At that base every read still shows the reference, so it says nothing about the indel. For indel records Allelescope therefore compares the reads one base further on: the first deleted base, or the base that follows the insertion point. The panel says which position it used (Figure 8), and the view stays centred on the VCF position.
 
-### 9.5 Filter by allele
+### 9.6 Filter by allele
 
 The quickest way: **click an allele** in the panel (anywhere except its tick box), or press its number on the keyboard. The track then shows only read pairs carrying that allele. Click it again, or press **0**, to show all reads.
 
 ![Allele filter applied to a deletion](docs/images/allele-filter-deletion.png)
 
-*Figure 28. The deletion at 3300 after clicking `DEL 7`: every read crossing the site carries the deletion.*
+*Figure 31. The deletion at 3300 after clicking `DEL 7`: every read crossing the site carries the deletion.*
 
 To keep several alleles at once:
 
@@ -608,7 +666,7 @@ To clear it yourself, do any one of these:
 - use **Reset filters** or **Clear All**;
 - click **Filter** with no allele ticked.
 
-### 9.6 Add a position that is not in the VCF
+### 9.7 Add a position that is not in the VCF
 
 1. Select the tab for the right reference sequence.
 2. Type one or more 1-based positions in **Jump to position**, separated by spaces, commas or semicolons.
@@ -618,13 +676,13 @@ Each position is added to the table as a yellow row, the view moves to it, and t
 
 ![A manually added position with its allele panel](docs/images/manual-position-alleles.png)
 
-*Figure 29. Position 2800 added by hand. The allele panel shows that most read pairs carry the reference base, with two low-frequency alternatives.*
+*Figure 32. Position 2800 added by hand. The allele panel shows that most read pairs carry the reference base, with two low-frequency alternatives.*
 
 The allele filter works the same way at these positions:
 
 ![Allele filter applied at a position added by hand](docs/images/allele-filter-applied.png)
 
-*Figure 30. Only the read pairs carrying the two alternative bases at 2800, chosen with the tick boxes and Filter.*
+*Figure 33. Only the read pairs carrying the two alternative bases at 2800, chosen with the tick boxes and Filter.*
 
 **Clear** removes all manual rows from the current tab.
 
@@ -642,7 +700,7 @@ At very high depth, for example a viral sample at 100,000x or more, showing ever
 
 ![The subsampling question](docs/images/deep-site-prompt.png)
 
-*Figure 31. A site crossed by 195,351 read pairs.*
+*Figure 34. A site crossed by 195,351 read pairs.*
 
 - **Subsample** shows the number of read pairs in the box. 2,000 is suggested; type another number if you like. The pairs are chosen at random, but the choice is fixed: a read always comes with its mate and split segments, and the same reads are shown every time the site is opened.
 - **Use all reads** shows every read pair. At this depth that takes noticeably longer to prepare and to draw.
@@ -653,7 +711,7 @@ Tick **Do the same for other deep sites in this session** to stop being asked un
 
 ![A subsampled site](docs/images/deep-site-subsampled.png)
 
-*Figure 32. The site subsampled to 2,000 read pairs. The counts below the notice, including the strand split, come from all 195,351 pairs.*
+*Figure 35. The site subsampled to 2,000 read pairs. The counts below the notice, including the strand split, come from all 195,351 pairs.*
 
 - **Show all reads** switches the site to the full read set. A deep site shown in full has a **Subsample to 2,000** button instead.
 - Your browser remembers the choice for each site of each instance, and the address records it ([section 7.6](#76-sharing-a-view)).
@@ -672,9 +730,9 @@ Every filter must be satisfied for a read to be shown:
 
 ![Order in which filters are applied](docs/images/diagram-filter-order.png)
 
-*Figure 33. How the read set for a site is narrowed down.*
+*Figure 36. How the read set for a site is narrowed down.*
 
-A change takes effect immediately: the track reloads with the new read set. Filters stay on as you move between sites. Two things are tied to one site and are reset when you select another: the allele filter ([section 9.5](#95-filter-by-allele)) and **Show only these** / **Hide these** for selected reads ([section 12.2](#122-use-the-selection)).
+A change takes effect immediately: the track reloads with the new read set. Filters stay on as you move between sites. Two things are tied to one site and are reset when you select another: the allele filter ([section 9.6](#96-filter-by-allele)) and **Show only these** / **Hide these** for selected reads ([section 12.2](#122-use-the-selection)).
 
 Filters return to their defaults when the page is reloaded, so save combinations you use often as presets ([section 11.7](#117-reset-download-and-presets)), or keep the address of the view ([section 7.6](#76-sharing-a-view)).
 
@@ -684,7 +742,7 @@ Open a section by clicking its title. Only one is open at a time.
 
 ![The three filter sections](docs/images/filter-sections.png)
 
-*Figure 34. The three sections of the Filters card, each shown open.*
+*Figure 37. The three sections of the Filters card, each shown open.*
 
 ### 11.3 Strand
 
@@ -692,7 +750,7 @@ The **Strand** selector in the view options limits the reads to one strand. **Pl
 
 ![The strand selector at a strand-biased site](docs/images/strand-comparison.png)
 
-*Figure 35. The same site with each Strand setting. The alternative base (green A in the reads) is carried only by reverse-strand reads, which is a typical sign of an artefact. With only those reads shown it is frequent enough for the coverage bar to colour the site. The allele panel shows the same thing as numbers (Figure 25).*
+*Figure 38. The same site with each Strand setting. The alternative base (green A in the reads) is carried only by reverse-strand reads, which is a typical sign of an artefact. With only those reads shown it is frequent enough for the coverage bar to colour the site. The allele panel shows the same thing as numbers (Figure 25).*
 
 ### 11.4 Numeric limits
 
@@ -723,7 +781,7 @@ Point at a property's name to see what it means.
 
 ![Duplicates and mates excluded](docs/images/filters-flags-set.png)
 
-*Figure 36. Duplicates and mates set to exclude; everything else is left at any.*
+*Figure 39. Duplicates and mates set to exclude; everything else is left at any.*
 
 **SAM flags** come from the BAM:
 
@@ -756,7 +814,7 @@ The filters that are switched on are listed at the top of the Filters card, and 
 
 ![Filters applied](docs/images/filters-active.png)
 
-*Figure 37. Duplicates and mates excluded and a minimum mapping quality of 20, leaving non-duplicate reads that cross the site.*
+*Figure 40. Duplicates and mates excluded and a minimum mapping quality of 20, leaving non-duplicate reads that cross the site.*
 
 Each badge states the condition that is applied:
 
@@ -770,7 +828,7 @@ Open the gear on the Filters card:
 
 ![The Filters gear menu](docs/images/filters-gear-menu.png)
 
-*Figure 38. The Filters gear menu.*
+*Figure 41. The Filters gear menu.*
 
 - **Reset filters** returns every filter to its default and clears the allele filter.
 - **Download settings (.json)** saves the current filter settings as a file.
@@ -789,7 +847,7 @@ Hold **Shift** and click a read in the alignment view. The read gets a green out
 
 ![Reads selected in the alignment view](docs/images/read-selection.png)
 
-*Figure 39. Two reads selected. Their names are listed in the bar above the alignment view, with the actions for them.*
+*Figure 42. Two reads selected. Their names are listed in the bar above the alignment view, with the actions for them.*
 
 **[✕]** next to a name removes that read from the selection. **Clear List** empties the selection and restores the full read set; a message offers **Undo**.
 
@@ -803,11 +861,11 @@ Hold **Shift** and click a read in the alignment view. The read gets a green out
 
 ![Show only these](docs/images/read-selection-show-only.png)
 
-*Figure 40. After Show only these: only the selected read pairs remain.*
+*Figure 43. After Show only these: only the selected read pairs remain.*
 
 ![Hide these](docs/images/read-selection-hide.png)
 
-*Figure 41. After Hide these: the selected read pairs are gone and everything else is shown.*
+*Figure 44. After Hide these: the selected read pairs are gone and everything else is shown.*
 
 Selection works by read name, so a read and its mate always go together. **Show only these** and **Hide these** act on the selection as it stands when you click. If you change the selection afterwards, click the button again.
 
@@ -825,7 +883,7 @@ The **Clear Highlights** button does nothing in this version. Use **Clear List**
 
 ![The header gear menu](docs/images/header-gear-menu.png)
 
-*Figure 42. The header gear menu. Each item says what it affects.*
+*Figure 45. The header gear menu. Each item says what it affects.*
 
 | Item | What it does |
 |---|---|
@@ -897,20 +955,20 @@ The examples use the demo dataset ([Appendix B](#appendix-b-the-datasets-used-in
 
 1. Click the variant at `demo_seg1:5000`.
 2. Look at the allele panel: the ALT allele A reads `0+ / 13−` and is marked **⚠ strand** (Figure 25).
-3. To see it in the reads, set **Strand** to **Plus (+)**, then to **Minus (-)**: the green A appears only with **Minus (-)** (Figure 35).
+3. To see it in the reads, set **Strand** to **Plus (+)**, then to **Minus (-)**: the green A appears only with **Minus (-)** (Figure 38).
 4. Set **Strand** back to **Both** and press **X** to mark the variant as an artefact; press **E** to note why.
 
 ### 15.2 Does the support survive without duplicates?
 
 1. Click a variant.
-2. Open **Flags and read types** and set **Duplicates** and **mates** to **exclude** (Figure 36).
-3. The track now holds only non-duplicate reads that cross the site, and the list of filters in use shows `exclude duplicates` and `exclude mates` (Figure 37). Compare the allele balance in the coverage bar with what you saw before.
+2. Open **Flags and read types** and set **Duplicates** and **mates** to **exclude** (Figure 39).
+3. The track now holds only non-duplicate reads that cross the site, and the list of filters in use shows `exclude duplicates` and `exclude mates` (Figure 40). Compare the allele balance in the coverage bar with what you saw before.
 4. Click **Clear All**.
 
 ### 15.3 Which reads carry a deletion?
 
 1. Click the deletion at `demo_seg1:3300`.
-2. In the allele panel, click `DEL 7`, the row marked `ALT` (Figure 28), or press its number.
+2. In the allele panel, click `DEL 7`, the row marked `ALT` (Figure 31), or press its number.
 3. Shift-click any reads you want to keep a record of and click **Export**.
 4. Select the next variant. The allele filter is cleared for you.
 
@@ -921,13 +979,13 @@ The examples use the demo dataset ([Appendix B](#appendix-b-the-datasets-used-in
 
 ![Split reads at a breakpoint](docs/images/split-reads-site.png)
 
-*Figure 43. Only split reads shown. They all end at the breakpoint.*
+*Figure 46. Only split reads shown. They all end at the breakpoint.*
 
 3. The other parts of these reads are in the same track but on another sequence. Click a read: the details box lists its **Supplementary Alignments**, which give the other location. Type that region into the IGV position box, here `demo_seg2:700-1100`:
 
 ![The other half of the split reads](docs/images/split-reads-partner.png)
 
-*Figure 44. The partner segments of the same reads on `demo_seg2`.*
+*Figure 47. The partner segments of the same reads on `demo_seg2`.*
 
 4. Set **split reads** back to **any** when you are done.
 
@@ -939,7 +997,7 @@ The examples use the demo dataset ([Appendix B](#appendix-b-the-datasets-used-in
 
 ![Pairs with both mates on the forward strand](docs/images/orientation-f1f2.png)
 
-*Figure 45. Pairs in F1F2 orientation.*
+*Figure 48. Pairs in F1F2 orientation.*
 
 ### 15.6 Review a whole list
 
@@ -1026,11 +1084,13 @@ Examples: `4112` = 4096 + 16, an F1R2 proper pair. `8208` = 8192 + 16, an R1F2 p
 | `status`, `note` | Your review |
 | `observed_alleles` | For sites opened in this session: each allele with its count, share and strand split, for example `SNP:C=26(31.33%,15+/11-)` |
 | `read_flags` | For sites opened in this session: the read-evidence warnings, comma-separated, for example `ambiguous,mismatches` ([section 9.3](#93-read-evidence)) |
+| `effect`, `primers` | With a gene annotation or primer scheme: the effects (`gene:change:kind`) and the primers the variant lies in ([section 9.4](#94-gene-effects-and-primers)) |
 
 ### A.5 Commands
 
 ```
-build_variant_browser -b BAM -r FASTA [-v VCF] [-g GENOME_NAME] [-o OUT_DIR] [-t THREADS]
+build_variant_browser -b BAM -r FASTA [-v VCF] [-a GFF3|GTF] [-p PRIMERS_BED] [-g GENOME_NAME]
+                      [-o OUT_DIR] [-t THREADS] [--bam-processing auto|full|skip] [--link]
 start_server [--data-dir DIR] [--port PORT] [--host HOST] [--debug]
 docker run --rm -p 127.0.0.1:8000:8000 [-v FOLDER:/data] allelescope [serve | demo | build ARGS]
 ```
@@ -1078,11 +1138,12 @@ start_server --data-dir Browsers --port 8000
 
 Then open `http://localhost:8000/demo/`.
 
-### B.2 Datasets for sections 8, 9.3 and 10
+### B.2 Datasets for sections 8, 9.3, 9.4 and 10
 
 | Dataset | Used in | Contents |
 |---|---|---|
 | 8-segment genome | Figures 18–20, 23, 24 | Eight random sequences of 0.9–2.4 kb named like influenza segments (`seg1_PB2` … `seg8_NS`), about 30x paired reads, one or two SNPs per segment, `AF` in the VCF |
 | 41-contig assembly | Figures 21, 22 | Forty contigs `contig_01` … `contig_40` and one with a 63-character assembler-style name, one SNP each |
-| Deep viral-like sample | Figures 31, 32 | Two 30 kb sequences, 1.4 million reads, about 198,000 reads crossing one SNP at `chr1:11501` |
+| Deep viral-like sample | Figures 34, 35 | Two 30 kb sequences, 1.4 million reads, about 198,000 reads crossing one SNP at `chr1:11501` |
 | Read-evidence test set | Figures 26, 27 | One 6 kb sequence with seven SNPs at about 60x: one clean, and one each with ALT reads ending at the site, carrying extra mismatches and alternative hits, all in F1R2 pairs, all duplicates, clipped with long inserts, and one with `AF` 0.5 in the VCF but 10 % in the reads. Made by `demo/simulate_artefacts.py`; build it with `--bam-processing skip` so its duplicate marks are kept |
+| Amplicon test set | Figures 28–30 | A 3 kb sequence with one gene on each strand, a GFF3 annotation, and 8 tiled 400 bp amplicons (primer BED, primers not trimmed), 50 read pairs of 2×250 bp each; nine variants: missense, synonymous, stop gained, frameshift, in-frame insertion, a missense change on the − strand, one in a primer and present in every molecule, one that exists only in one primer's sequence, and one outside the genes. Made by `demo/simulate_amplicons.py`; build it with `-a genes.gff3 -p primers.bed --bam-processing skip` |

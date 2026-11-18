@@ -28,6 +28,9 @@ var EVIDENCE_RULES = {
     insertSize:  { minDiff: 50, minRelative: 0.25 },  // median insert size difference
     baseQuality: { minDrop: 10, maxMean: 25 },        // mean BQ at the site
     afDiscordance: { minDiff: 0.15 },                 // VCF AF vs reads, absolute
+    // reads with primer sequence at the site; from `confounds` (share of the
+    // allele's or the baseline's reads) strand and orientation are not tested
+    primer:      { minFraction: 0.5, minRatio: 2, confounds: 0.2 },
 };
 
 /* Short names, used for badges, the TSV and INFO/READ_FLAGS in the VCF. */
@@ -43,6 +46,8 @@ var EVIDENCE_LABELS = {
     "duplicates":   "duplicates",
     "low-bq":       "low BQ",
     "af-mismatch":  "AF ≠ VCF",
+    "primer":       "primer",
+    "primer-masked": "primer-masked",
 };
 
 function _pct(x) {
@@ -86,7 +91,16 @@ function alleleEvidenceFlags(a, alleles) {
     const add = (key, detail) => flags.push({ key, label: EVIDENCE_LABELS[key], detail });
     if (!a || a.type === "ref" || a.xa === ".") return flags;
 
-    if (typeof strandBias === "function") {
+    // At a primer site of amplicon data, the alleles' reads come from
+    // different amplicons (one ends in its primer there, the next starts
+    // across it), so strand and pair orientation differ by design: leave
+    // those two tests out and let the primer warnings speak.
+    const R0 = EVIDENCE_RULES;
+    const primerShare = x => (x && x.ev && typeof x.ev.primer === "number" && x.ev.n) ? x.ev.primer / x.ev.n : 0;
+    const base0 = evidenceBaseline(a, alleles);
+    const amplicon = Math.max(primerShare(a), primerShare(base0)) >= R0.primer.confounds;
+
+    if (!amplicon && typeof strandBias === "function") {
         const sb = strandBias(a, alleles);
         if (sb) {
             const side = sb.fwdFraction >= 0.5 ? "forward" : "reverse";
@@ -117,7 +131,7 @@ function alleleEvidenceFlags(a, alleles) {
     if (r) add("duplicates", `${_pct(r.f)} of its reads are marked as duplicates${_vs(r.fb, base)}: support may come from few original molecules.`);
 
     const paired = ev.f1r2 + ev.f2r1;
-    if (paired >= R.minReads && be && be.f1r2 + be.f2r1 >= R.minReads) {
+    if (!amplicon && paired >= R.minReads && be && be.f1r2 + be.f2r1 >= R.minReads) {
         const minor = Math.min(ev.f1r2, ev.f2r1) / paired;
         const p = fisherExactTwoSided(ev.f1r2, ev.f2r1, be.f1r2, be.f2r1);
         if (p < R.pValue && minor <= R.orientation.maxMinor) {
@@ -136,6 +150,23 @@ function alleleEvidenceFlags(a, alleles) {
         const diff = Math.abs(ev.isize_median - be.isize_median);
         if (diff >= R.insertSize.minDiff && diff >= R.insertSize.minRelative * be.isize_median) {
             add("insert-size", `Median insert size ${Math.round(ev.isize_median)} bp, against ${Math.round(be.isize_median)} bp for ${base}.`);
+        }
+    }
+
+    // Primer sequence (only with a primer scheme): the base at the site comes
+    // from the primer oligo, not from the sample, in reads that start (or end)
+    // inside a primer covering the site.
+    if (typeof ev.primer === "number") {
+        r = _fractionFlag(ev.primer, ev.n, be?.primer || 0, be?.n || 0, R.primer);
+        if (r) add("primer", `${_pct(r.f)} of its reads have primer sequence at the site${_vs(r.fb, base)}: the base may come from the primer, not from the sample.`);
+        if (be && typeof be.primer === "number" && be.n >= R.minReads && ev.n >= R.minReads) {
+            const f = ev.primer / ev.n, fb = be.primer / be.n;
+            if (fb >= R.primer.minFraction && f * R.primer.minRatio <= fb
+                    && fisherExactTwoSided(ev.primer, ev.n - ev.primer, be.primer, be.n - be.primer) < R.pValue) {
+                const clean = alleles.reduce((t, x) => t + (x.ev && typeof x.ev.primer === "number" ? x.ev.n - x.ev.primer : 0), 0);
+                const share = clean ? (ev.n - ev.primer) / clean : 0;
+                add("primer-masked", `${_pct(fb)} of the ${base} reads have primer sequence here, which always shows the primer's base. Among reads without primer sequence ${_pct(share)} carry this allele, against ${_pct(a.pct / 100)} overall: its true share is probably higher.`);
+            }
         }
     }
 
@@ -233,6 +264,8 @@ var EVIDENCE_MEASURES = [
         (ev, f) => (ev.f1r2 + ev.f2r1) ? f(ev.f1r2, ev.f1r2 + ev.f2r1) : "–"],
     ["duplicates",  "Duplicates", "Reads marked as duplicates",
         (ev, f) => f(ev.dup, ev.n)],
+    ["primer",      "Primer sequence", "Reads whose base at the site comes from an amplicon primer (shown when the instance has a primer scheme and the site is in a primer)",
+        (ev, f) => typeof ev.primer === "number" ? f(ev.primer, ev.n) : null],
 ];
 
 function evidenceTableHtml(alleles, expected) {
@@ -245,10 +278,12 @@ function evidenceTableHtml(alleles, expected) {
     const head = shown.map(a =>
         `<th scope="col">${describeAllele(a.xa)}${expected.has(a.xa) ? ' <span class="badge bg-info text-dark">ALT</span>' : ""}
            <div class="fw-normal text-muted">${a.ev.n} reads</div></th>`).join("");
-    const rows = EVIDENCE_MEASURES.map(([key, label, help, value]) => `
+    const rows = EVIDENCE_MEASURES
+        .filter(([, , , value]) => shown.some(a => value(a.ev, frac) !== null))
+        .map(([key, label, help, value]) => `
         <tr><th scope="row" title="${_escapeAttr(help)}">${label}</th>
         ${shown.map(a => {
-            const bad = flagged.get(a.xa).has(key);
+            const bad = flagged.get(a.xa).has(key) || (key === "primer" && flagged.get(a.xa).has("primer-masked"));
             return `<td class="${bad ? "text-danger fw-semibold" : ""}">${value(a.ev, frac)}</td>`;
         }).join("")}</tr>`).join("");
     return `

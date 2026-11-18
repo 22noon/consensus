@@ -48,6 +48,7 @@ function addManualVariantRow() {
             }
             insertRowSorted(tbody, row, pos);
             selectVariantRow(row, v, alleles);
+            if (typeof loadAnnotation === "function") loadAnnotation();   // primers at the new position
         });
 
         input.value = "";

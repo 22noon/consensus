@@ -107,14 +107,16 @@ function strandBias(allele, alleles) {
 }
 
 function alleleStatsHtml(a, alleles) {
-    if (a.fwd === undefined) return "";
+    const effect = typeof alleleEffectHtml === "function" ? alleleEffectHtml(a) : "";
+    const effectLine = effect ? `<div class="allele-effect small">${effect}</div>` : "";
+    if (a.fwd === undefined) return effectLine;
     const parts = [`<span title="Reads on the forward / reverse strand">${a.fwd}+ / ${a.rev}−</span>`];
     if (a.bq !== null && a.bq !== undefined) parts.push(`<span title="Mean base quality at the site">BQ ${Math.round(a.bq)}</span>`);
     if (a.mq !== null && a.mq !== undefined) parts.push(`<span title="Mean mapping quality">MQ ${Math.round(a.mq)}</span>`);
     if (typeof alleleFlagsHtml === "function") {
         const flags = alleleFlagsHtml(a, alleles);
         if (flags) parts.push(flags);
-        return `<div class="allele-stats small text-muted">${parts.join(" · ")}</div>`;
+        return `<div class="allele-stats small text-muted">${parts.join(" · ")}</div>${effectLine}`;
     }
     const bias = strandBias(a, alleles);
     if (bias) {
@@ -155,6 +157,8 @@ async function fetchAlleles(site) {
         const data = await response.json();
         AppState.siteAlleles = AppState.siteAlleles || {};
         AppState.siteAlleles[siteKey(site)] = data.alleles || [];
+        AppState.siteMeta = AppState.siteMeta || {};
+        AppState.siteMeta[siteKey(site)] = { primers: data.primers || [], coding: !!data.coding };
         const entry = (AppState.siteSampling || {})[siteKey(site)];
         if (entry) entry.info = data.sampling || null;
         return data.alleles || [];
@@ -266,6 +270,8 @@ function buildAlleleFilterPanel(variant, site, alleles) {
                 </div>
             </div>
             ${siteNote}
+            ${typeof primerSiteNoteHtml === "function"
+                ? primerSiteNoteHtml((AppState.siteMeta || {})[siteKey(site)], alleles) : ""}
             ${typeof samplingNoticeHtml === "function" ? samplingNoticeHtml(site) : ""}
             <div class="d-flex gap-3 align-items-center flex-wrap">
 

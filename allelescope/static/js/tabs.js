@@ -339,7 +339,8 @@ function syncTabSelect() {
  */
 function createVariantTable() {
     const table = document.createElement("table");
-    table.className = "table table-sm table-hover align-middle variant-table";
+    table.className = "table table-sm table-hover align-middle variant-table"
+        + (typeof hasAnnotation === "function" && hasAnnotation() ? " has-effects" : "");
     table.innerHTML = `
         <thead class="table-light sticky-top">
             <tr>
@@ -347,6 +348,7 @@ function createVariantTable() {
                     <i class="bi bi-check2-circle"></i></th>
                 <th class="sortable" data-sort="pos" title="Sort by position">Pos</th>
                 <th>Ref</th><th>Alt</th>
+                <th class="col-effect" title="Effect on the protein, from the instance's gene annotation; 'primer' when the variant lies in an amplicon primer">Effect</th>
                 <th class="sortable" data-sort="af"
                     title="Allele fraction from the VCF, or as observed in the reads (in italics) once the site has been opened. Click to sort.">AF</th>
                 <th class="col-flags sortable" data-sort="flags"
@@ -399,6 +401,7 @@ function fillVariantRow(row, v) {
     row.dataset.pos = v.pos;
     row.dataset.af  = af.value;
     row.dataset.flags = flags.count;
+    const effect = typeof effectCell === "function" ? effectCell(v) : { html: "", title: "" };
     const review = typeof getReview === "function" ? getReview(v) : null;
     row.dataset.status = review?.s || "";
 
@@ -409,6 +412,7 @@ function fillVariantRow(row, v) {
         <td>${v.pos}</td>
         <td>${shortAlleleHtml(v.ref)}</td>
         <td>${shortAlleleHtml(v.alt)}</td>
+        <td class="col-effect" title="${escapeTabText(effect.title)}">${effect.html}</td>
         <td class="col-af${af.observed ? " fst-italic" : ""}"
             title="${afTitle}">${af.text}</td>
         <td class="col-flags" title="${escapeTabText(flags.title)}">${flags.html}</td>
