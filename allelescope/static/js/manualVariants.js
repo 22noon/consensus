@@ -58,7 +58,7 @@ function insertRowSorted(tbody, row, pos) {
     const rows = Array.from(tbody.querySelectorAll("tr"));
 
     for (let r of rows) {
-        const existingPos = parseInt(r.cells[0].innerText);
+        const existingPos = Number(r.dataset.pos);
         if (pos < existingPos) {
             tbody.insertBefore(row, r);
             return;

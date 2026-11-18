@@ -349,7 +349,7 @@ function _tsvCell(value) {
 
 function exportReviewTSV() {
     const header = ["chrom", "pos", "ref", "alt", "vcf_info", "af", "af_source",
-                    "status", "note", "observed_alleles"];
+                    "status", "note", "observed_alleles", "read_flags"];
     const lines = [header.join("\t")];
     (AppState.variants || []).filter(v => v.pos !== 0).forEach(v => {
         const r = getReview(v) || {};
@@ -361,10 +361,25 @@ function exportReviewTSV() {
         }).join("; ");
         lines.push([v.chrom, v.pos, v.ref, v.alt, v.info === "Manual" ? "" : v.info,
                     af.value >= 0 ? af.value.toFixed(4) : "", af.value >= 0 ? (af.observed ? "reads" : "vcf") : "",
-                    r.s || "", r.n || "", observed].map(_tsvCell).join("\t"));
+                    r.s || "", r.n || "", observed, _readFlags(v).join(",")].map(_tsvCell).join("\t"));
     });
     const name = (AppState.API_BASE || "").split("/").filter(Boolean).pop() || "allelescope";
     downloadText(lines.join("\n") + "\n", `${name}.review.tsv`, "text/tab-separated-values");
+}
+
+/* Read-evidence warnings of a variant ("" before its site has been opened). */
+function _readFlags(v) {
+    const e = typeof variantEvidence === "function" ? variantEvidence(v) : null;
+    return e ? [...new Set(e.flags.map(f => f.key))] : [];
+}
+
+function _allReadFlags() {
+    const out = {};
+    (AppState.variants || []).forEach(v => {
+        const f = _readFlags(v);
+        if (f.length) out[`${v.chrom}:${v.pos}`] = f;
+    });
+    return out;
 }
 
 async function exportReviewVCF() {
@@ -372,7 +387,7 @@ async function exportReviewVCF() {
         const response = await fetch(`${AppState.API_BASE}/api/review_vcf`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reviews: loadReviews() }),
+            body: JSON.stringify({ reviews: loadReviews(), flags: _allReadFlags() }),
         });
         if (!response.ok) {
             const err = await response.json().catch(() => ({}));

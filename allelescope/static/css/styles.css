@@ -444,3 +444,14 @@ tr.variant-row:hover .row-delete, tr.variant-row.selected .row-delete, .row-dele
 }
 #read-selection-card .read-action-bar { position: static; padding: 0; background: none; border: 0; gap: 0.35rem; }
 #read-selection-card .read-action-bar .btn { flex: none; border-radius: 0.3rem; padding: 0.1rem 0.5rem; font-size: 0.8rem; }
+
+/* ---- Read evidence (evidence.js) ---- */
+.variant-table .col-flags { width: 2.6rem; text-align: center; white-space: nowrap; }
+.variant-table .evidence-count { color: var(--bs-danger); font-size: .8rem; font-weight: 600; }
+.variant-table .evidence-count i { margin-right: 2px; }
+.evidence-flag { white-space: nowrap; cursor: help; }
+.evidence-footer details > summary { cursor: pointer; }
+.evidence-table { width: auto; min-width: 60%; }
+.evidence-table th, .evidence-table td { padding: 2px 8px; text-align: right; white-space: nowrap; vertical-align: top; }
+.evidence-table tbody th { text-align: left; font-weight: 500; color: var(--bs-secondary-color); cursor: help; }
+.evidence-table thead th { font-weight: 600; }

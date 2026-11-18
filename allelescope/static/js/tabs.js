@@ -349,6 +349,9 @@ function createVariantTable() {
                 <th>Ref</th><th>Alt</th>
                 <th class="sortable" data-sort="af"
                     title="Allele fraction from the VCF, or as observed in the reads (in italics) once the site has been opened. Click to sort.">AF</th>
+                <th class="col-flags sortable" data-sort="flags"
+                    title="Read-evidence warnings, once the site has been opened. Click to sort.">
+                    <i class="bi bi-flag"></i></th>
                 <th title="Your note; double-click a cell (or press E) to edit. Hover to see the VCF INFO.">Note</th>
                 <th class="col-del"></th>
             </tr>
@@ -386,8 +389,16 @@ function variantAF(v) {
 
 function fillVariantRow(row, v) {
     const af = variantAF(v);
+    const flags = typeof variantFlagsCell === "function"
+        ? variantFlagsCell(v) : { html: "", count: -1, title: "" };
+    const evidence = typeof variantEvidence === "function" ? variantEvidence(v) : null;
+    let afTitle = af.observed ? "Observed in the reads" : af.value >= 0 ? "From the VCF" : "Not known yet: open the site";
+    if (!af.observed && evidence && evidence.observedAF !== null) {
+        afTitle += `; ${Math.round(evidence.observedAF * 100)}% in the reads`;
+    }
     row.dataset.pos = v.pos;
     row.dataset.af  = af.value;
+    row.dataset.flags = flags.count;
     const review = typeof getReview === "function" ? getReview(v) : null;
     row.dataset.status = review?.s || "";
 
@@ -399,7 +410,8 @@ function fillVariantRow(row, v) {
         <td>${shortAlleleHtml(v.ref)}</td>
         <td>${shortAlleleHtml(v.alt)}</td>
         <td class="col-af${af.observed ? " fst-italic" : ""}"
-            title="${af.observed ? "Observed in the reads" : af.value >= 0 ? "From the VCF" : "Not known yet: open the site"}">${af.text}</td>
+            title="${afTitle}">${af.text}</td>
+        <td class="col-flags" title="${escapeTabText(flags.title)}">${flags.html}</td>
         <td class="small editable-info${note ? "" : " text-muted"}" title="${escapeTabText(vcfInfo || v.info || "")}"
             data-placeholder="add note">${escapeTabText(note || (v.info === "Manual" ? "" : vcfInfo))}</td>
         <td class="col-del">

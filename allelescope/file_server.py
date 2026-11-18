@@ -408,6 +408,13 @@ def extract_bam(browser=None):
     result = processed_bam(serverpath, Chrom, Pos, Ref, sample=Sample)
     if result == 0:
         stat_file = serverpath / "bam" / f"{site_stem(Chrom, Pos, Sample)}.bam.indelstats.txt"
+        evidence = {}
+        evidence_file = Path(f"{stat_file}".replace(".indelstats.txt", ".evidence.json"))
+        if evidence_file.exists():
+            try:
+                evidence = json.loads(evidence_file.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                evidence = {}
         with open(stat_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -429,6 +436,8 @@ def extract_bam(browser=None):
                     allele["rev"] = int(fields[5])
                     allele["bq"] = float(fields[6]) if fields[6] else None
                     allele["mq"] = float(fields[7]) if fields[7] else None
+                if xa in evidence:
+                    allele["ev"] = evidence[xa]
                 mock_alleles.append(allele)
 
         return jsonify({"success": True, "alleles": mock_alleles,
@@ -461,13 +470,17 @@ def review_vcf(browser=None):
     The instance's VCF with the browser's review added to each record:
         INFO/REVIEW       confirmed | doubtful | artefact
         INFO/REVIEW_NOTE  the note, percent-encoded (%3B for ";", %20 for space ...)
-    Body: {"reviews": {"chrom:pos": {"s": status, "n": note}, ...}}
+        INFO/READ_FLAGS   read-evidence warnings for sites opened in the browser
+    Body: {"reviews": {"chrom:pos": {"s": status, "n": note}, ...},
+           "flags":   {"chrom:pos": ["read-end", "strand", ...], ...}}
     """
     serverpath = DATA_DIR if browser is None else DATA_DIR / browser
     src = instance_vcf(serverpath)
     if src is None:
         return jsonify({"error": "This instance has no VCF"}), 404
-    reviews = (request.get_json(silent=True) or {}).get("reviews") or {}
+    body = request.get_json(silent=True) or {}
+    reviews = body.get("reviews") or {}
+    flags = body.get("flags") or {}
 
     with pysam.VariantFile(str(src)) as vin:
         header = vin.header.copy()
@@ -477,6 +490,11 @@ def review_vcf(browser=None):
         if "REVIEW_NOTE" not in header.info:
             header.add_meta("INFO", items=[("ID", "REVIEW_NOTE"), ("Number", "1"), ("Type", "String"),
                                            ("Description", "Allelescope review note (percent-encoded)")])
+        if flags and "READ_FLAGS" not in header.info:
+            header.add_meta("INFO", items=[("ID", "READ_FLAGS"), ("Number", "."), ("Type", "String"),
+                                           ("Description", "Allelescope read-evidence warnings: strand, orientation, "
+                                            "read-end, mismatches, ambiguous, clipped, split, insert-size, "
+                                            "duplicates, low-bq, af-mismatch")])
         with tempfile.TemporaryDirectory() as tmp:
             out_path = Path(tmp) / "reviewed.vcf"
             with pysam.VariantFile(str(out_path), "w", header=header) as vout:
@@ -489,6 +507,10 @@ def review_vcf(browser=None):
                         rec.info["REVIEW"] = status
                     if note:
                         rec.info["REVIEW_NOTE"] = _vcf_text(note)
+                    rf = [f for f in (flags.get(f"{rec.chrom}:{rec.pos}") or [])
+                          if isinstance(f, str) and re.fullmatch(r"[a-z-]+", f)]
+                    if rf:
+                        rec.info["READ_FLAGS"] = rf
                     vout.write(rec)
             data = out_path.read_bytes()
 

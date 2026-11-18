@@ -238,6 +238,25 @@ not (Fisher's exact test p < 0.01, with at most 15 % on one strand), which is
 a common sign of an artefact.  The counts use one read per read pair: the
 read that crosses the site.
 
+### Read evidence
+
+Under the allele list, **Read evidence** compares the reads behind the main
+alleles: how often the site is within 10 bp of a read end, other edits per
+read (`NM`, not counting the allele), multi-mapped reads (MAPQ 0, secondary,
+bwa `XA`/`XS`), soft clips near the site, split reads, median insert size,
+F1R2 pair orientation and duplicates.  Each non-reference allele is compared
+with the reference allele (or the commonest other allele), and a warning such
+as **⚠ read end**, **⚠ mismatches**, **⚠ multi-mapped**, **⚠ orientation** or
+**⚠ duplicates** is shown when the difference is both large and significant
+(at least 5 reads, Fisher's exact test p < 0.01 where counts are compared).
+Point at a warning to see what it means; the thresholds are in
+`static/js/evidence.js` (`EVIDENCE_RULES`) and in the user manual, section 9.3.
+
+The variant table has a flag column: a tick for an opened site with no
+warnings, or ⚠ and the number of warnings, including **AF ≠ VCF** when the
+VCF's AF and the reads differ by 15 points or more.  The warnings are added to
+the review table (`read_flags`) and the reviewed VCF (`INFO/READ_FLAGS`).
+
 Click an allele to show only its reads, and click it again to show all reads
 (or press its number, 1 to 9, and 0 to clear).  While a site is being
 prepared for the first time the panel shows *Preparing reads at ...*.
