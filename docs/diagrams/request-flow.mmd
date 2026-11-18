@@ -1,0 +1,21 @@
+sequenceDiagram
+  autonumber
+  actor U as You
+  participant P as Viewer page (IGV.js)
+  participant S as Allelescope server
+  participant D as Files on the server
+  U->>P: Click a variant row or add a position
+  opt First visit, more than 2,000 read pairs
+    P->>S: How many read pairs cross chrom:pos?
+    P->>U: Subsample (2,000 suggested) or use all reads?
+  end
+  P->>S: Ask for reads at chrom:pos with the current filter settings
+  alt First visit to this site
+    S->>D: Read alignment.markdup.bam
+    Note over S,D: Count alleles over all reads<br/>Keep all reads, or the subsample<br/>Fetch mates and split partners, tag every read
+    S->>D: Save per-site BAM in instance/bam/
+  end
+  Note over S,D: Apply the filters to the per-site BAM
+  S->>D: Save filtered BAM in data-dir/cache/instance/
+  S-->>P: Filtered BAM + index
+  P-->>U: "Spanning Reads Only" track is redrawn

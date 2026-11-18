@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Allelescope User Manual</title><style>
+:root { --ink:#1f2933; --muted:#5f6b7a; --line:#d9dee5; --accent:#a61e4d; --soft:#f5f7fa; --note:#fff8e6; --noteline:#e0a800; }
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin:0; color:var(--ink); background:#fff; font: 16px/1.6 Helvetica, Arial, "Liberation Sans", sans-serif; }
+main { max-width: 940px; margin: 0 auto; padding: 40px 24px 80px; }
+h1 { font-size: 2.1rem; line-height:1.2; margin: 0 0 .3em; }
+h2 { font-size: 1.5rem; margin: 2.2em 0 .6em; padding-top: .4em; border-top: 2px solid var(--ink); }
+h3 { font-size: 1.15rem; margin: 1.8em 0 .5em; }
+a { color: var(--accent); }
+hr { display:none; }
+code { font: .88em/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--soft); padding: .1em .35em; border-radius: 4px; }
+pre { background: var(--soft); border:1px solid var(--line); border-radius: 6px; padding: 12px 14px; overflow-x: auto; }
+pre code { background:none; padding:0; font-size:.85rem; }
+.tablewrap { overflow-x:auto; margin: 1em 0; }
+table { border-collapse: collapse; width: 100%; font-size: .93rem; }
+th, td { border: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+th { background: var(--soft); }
+blockquote { margin: 1.2em 0; padding: 10px 16px; background: var(--note); border-left: 4px solid var(--noteline); border-radius: 0 6px 6px 0; }
+blockquote p { margin: .3em 0; }
+figure { margin: 1.6em 0; }
+figure img { display:block; max-width:100%; height:auto; border:1px solid var(--line); border-radius: 6px; }
+figure img.diagram.tall { max-width: min(100%, 560px); margin: 0 auto; border: none; }
+figcaption { color: var(--muted); font-size: .9rem; margin-top: .5em; }
+p img { max-width:100%; }
+@media print {
+  main { max-width:none; padding:0; }
+  body { font-size: 10.5pt; }
+  h2 { break-after: avoid; } h3 { break-after: avoid; }
+  figure, table, pre, blockquote { break-inside: avoid; }
+  a { color: inherit; text-decoration: none; }
+  figure img.shot { max-height: 150mm; width:auto; }
+  figure img.diagram.tall { max-height: 190mm; width:auto; }
+}
+</style></head>
+<body><main>
+<h1 id="allelescope-user-manual">Allelescope User Manual</h1>
+<p><em>Covers Allelescope 0.1.02 as on the <code>main</code> branch of <code>22noon/consensus</code> (pull requests #1 to #8). Revised 18 November 2026. Also available as a <a href="https://22noon.github.io/consensus/">web page</a> and a <a href="allelescope-user-manual.pdf">PDF</a>.</em></p>
+<p>Allelescope is a web-based viewer for checking variant calls against the reads behind them. You pick a site, and Allelescope shows the reads that cross it, together with their mates and split-read partners, in an embedded IGV view. You can narrow those reads down by flag, pairing, strand, edit distance, soft clipping or observed allele, pick out individual reads to keep, hide or download, and record a verdict for each variant as you go.</p>
+<p>This manual has two audiences:</p>
+<ul>
+<li><strong>People who review variants</strong> in a browser that somebody else has set up: start at <a href="#4-opening-a-browser-instance">Opening a browser instance</a>.</li>
+<li><strong>People who set Allelescope up</strong>: start at <a href="#2-installing">Installing</a>.</li>
+</ul>
+<p>All screenshots were taken from a running copy of this version, using small synthetic datasets described in <a href="#appendix-b-the-datasets-used-in-the-figures">Appendix B</a>. Section 14 lists the few places where this version still behaves differently from what the screen suggests.</p>
+<h2 id="contents">Contents</h2>
+<ol>
+<li><a href="#1-how-allelescope-works">How Allelescope works</a></li>
+<li><a href="#2-installing">Installing</a></li>
+<li><a href="#3-building-a-browser-instance">Building a browser instance</a></li>
+<li><a href="#4-opening-a-browser-instance">Opening a browser instance</a></li>
+<li><a href="#5-a-tour-of-the-screen">A tour of the screen</a></li>
+<li><a href="#6-looking-at-a-variant">Looking at a variant</a></li>
+<li><a href="#7-reviewing-a-list-of-variants">Reviewing a list of variants</a></li>
+<li><a href="#8-genomes-with-many-sequences">Genomes with many sequences</a></li>
+<li><a href="#9-alleles-at-a-site">Alleles at a site</a></li>
+<li><a href="#10-very-deep-sites">Very deep sites</a></li>
+<li><a href="#11-filtering-reads">Filtering reads</a></li>
+<li><a href="#12-selecting-isolating-and-exporting-reads">Selecting, isolating and exporting reads</a></li>
+<li><a href="#13-housekeeping-caches-saved-lists-and-presets">Housekeeping: caches, saved lists and presets</a></li>
+<li><a href="#14-known-issues-in-this-version">Known issues in this version</a></li>
+<li><a href="#15-worked-examples">Worked examples</a></li>
+<li><a href="#16-troubleshooting">Troubleshooting</a></li>
+</ol>
+<p>Appendices: <a href="#appendix-a-reference-tables">A. Reference tables</a> · <a href="#appendix-b-the-datasets-used-in-the-figures">B. The datasets used in the figures</a></p>
+<hr />
+<h2 id="1-how-allelescope-works">1. How Allelescope works</h2>
+<p>Allelescope has three parts: a build command that prepares one sample, a small web server, and the viewer page that runs in your web browser.</p>
+<figure><img class="shot" alt="Workflow from input files to the web browser" src="images/diagram-workflow.png" /><figcaption>Figure 1. From input files to a browser instance.</figcaption></figure>
+<p>A <strong>browser instance</strong> is one folder holding the prepared files for one sample. A <strong>data directory</strong> is a folder that holds one or more instances. One server serves a whole data directory, and each instance gets its own web address.</p>
+<p>When you choose a site, the page does not load the whole BAM. It asks the server for the reads at that one site:</p>
+<figure><img class="shot" alt="What happens when you click a variant" src="images/diagram-request-flow.png" /><figcaption>Figure 2. What happens when you click a variant or add a position. The question about subsampling is asked only at very deep sites (<a href="#10-very-deep-sites">section 10</a>).</figcaption></figure>
+<p>Two consequences are worth knowing:</p>
+<ul>
+<li><strong>The first visit to a site is slower than later visits.</strong> The server extracts and tags the reads once and keeps the result. While it works, the allele panel says <em>Preparing reads at …</em>.</li>
+<li><strong>Filtering happens on the server.</strong> Each change of filter fetches a new, smaller read set, which is why Allelescope can filter on things a plain IGV session cannot, such as "the mate of a read that crosses this site".</li>
+</ul>
+<p>The read track is named <strong>Spanning Reads Only</strong>, but it holds more than the reads that cross the site. Allelescope also fetches the mate of every crossing read and the other parts of split reads, wherever they map:</p>
+<figure><img class="shot" alt="Read categories kept for a site" src="images/diagram-read-categories.png" /><figcaption>Figure 3. The kinds of read stored for a site, with the names used in the filter panel.</figcaption></figure>
+<hr />
+<h2 id="2-installing">2. Installing</h2>
+<h3 id="21-with-pip">2.1 With pip</h3>
+<p>Allelescope needs Python 3.12 or later.</p>
+<pre><code class="language-bash">pip install allelescope
+</code></pre>
+<p>This installs three commands: <code>build_variant_browser</code>, <code>start_server</code> and <code>generate_viewer</code> (the last is called for you by the build step).</p>
+<p>The build step also needs these command-line tools on your <code>PATH</code>:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Needed</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>samtools</code></td>
+<td>always</td>
+<td>collate, fixmate, sort, markdup, index, faidx</td>
+</tr>
+<tr>
+<td><code>bgzip</code></td>
+<td>only with a VCF</td>
+<td>compressing a plain-text VCF</td>
+</tr>
+<tr>
+<td><code>tabix</code></td>
+<td>only with a VCF</td>
+<td>indexing the VCF</td>
+</tr>
+</tbody>
+</table></div>
+<p>The project was developed with samtools 1.19.2 and htslib 1.19, and this manual was tested with samtools 1.19.2. One way to get them:</p>
+<pre><code class="language-bash">conda create -n allelescope -c conda-forge -c bioconda samtools=1.19.2 htslib=1.19
+conda activate allelescope
+pip install allelescope
+</code></pre>
+<h3 id="22-with-docker-windows-macos-linux">2.2 With Docker (Windows, macOS, Linux)</h3>
+<p>pysam and samtools do not run on Windows, so on Windows use the Docker image, which also works on macOS and Linux. From the repository folder:</p>
+<pre><code class="language-bash">docker build -t allelescope .
+docker run --rm -p 127.0.0.1:8000:8000 allelescope demo
+</code></pre>
+<p>The second command builds the demo instance and serves it at <code>http://localhost:8000/demo/</code>. To build and serve your own data, mount a folder at <code>/data</code> and use the <code>build</code> and <code>serve</code> commands; <code>docker/README.md</code> in the repository gives the exact commands for PowerShell, Command Prompt and macOS/Linux. Instance folders built with Docker can be served by a normal installation and the other way round.</p>
+<h3 id="23-internet-access">2.3 Internet access</h3>
+<p><strong>The computer that displays the viewer needs internet access.</strong> The page loads IGV.js, Bootstrap and its icons from <code>cdn.jsdelivr.net</code>. If that site is blocked, the page opens without its layout and without the alignment view.</p>
+<hr />
+<h2 id="3-building-a-browser-instance">3. Building a browser instance</h2>
+<h3 id="31-what-you-need">3.1 What you need</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Required</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BAM file</td>
+<td>yes</td>
+<td>Aligned reads. Keep the <code>MD</code> tags that aligners such as <code>bwa mem</code> write (see the note below).</td>
+</tr>
+<tr>
+<td>Reference FASTA</td>
+<td>yes</td>
+<td>The reference the reads were aligned to. It can have any number of sequences: chromosomes, the segments of a segmented virus, or the contigs of an assembly.</td>
+</tr>
+<tr>
+<td>VCF or VCF.gz</td>
+<td>no</td>
+<td>Must be sorted. Without it, the viewer starts with an empty variant list and you add positions by hand.</td>
+</tr>
+</tbody>
+</table></div>
+<blockquote>
+<p><strong>Note on <code>MD</code> tags.</strong> Allelescope uses the <code>MD</code> tag to tell a reference base from a mismatch. If your BAM has no <code>MD</code> tags, SNP alleles in the allele panel are labelled <code>REF</code> instead of <code>SNP</code> (the base shown is still correct). Add the tags first with <code>samtools calmd -b in.bam reference.fa &gt; out.bam</code>.</p>
+</blockquote>
+<h3 id="32-preparing-the-vcf-recommended">3.2 Preparing the VCF (recommended)</h3>
+<p>Normalising the VCF splits multi-allelic records and left-aligns indels, so that each row in the viewer is one allele:</p>
+<pre><code class="language-bash">bcftools norm -f reference.fa -m -any raw_calls.vcf.gz \
+  | bcftools +fill-tags -- -t all \
+  | bcftools view -o calls.norm.vcf.gz -O z
+
+bcftools index -t calls.norm.vcf.gz
+</code></pre>
+<p>From the VCF the viewer shows, next to each variant:</p>
+<ul>
+<li>the <code>DP</code> value from the <code>INFO</code> column, as a note;</li>
+<li>the allele fraction (<strong>AF</strong> column), taken from <code>INFO/AF</code>, or else from the first sample's <code>AF</code> or <code>VAF</code>, or else worked out from its <code>AD</code>. When the VCF has none of these, the fraction observed in the reads is shown once you open the site.</li>
+</ul>
+<h3 id="33-running-the-build">3.3 Running the build</h3>
+<pre><code class="language-bash">build_variant_browser -b sample.bam -r reference.fa -v calls.norm.vcf.gz -o Browsers/sampleA
+</code></pre>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-b</code>, <code>--bam</code></td>
+<td>required</td>
+<td>Input BAM</td>
+</tr>
+<tr>
+<td><code>-r</code>, <code>--reference</code></td>
+<td>required</td>
+<td>Reference FASTA</td>
+</tr>
+<tr>
+<td><code>-v</code>, <code>--variants</code></td>
+<td>none</td>
+<td>VCF or VCF.gz, sorted</td>
+</tr>
+<tr>
+<td><code>-o</code>, <code>--out-dir</code></td>
+<td><code>./out_dir</code></td>
+<td>Instance folder to create</td>
+</tr>
+<tr>
+<td><code>-g</code>, <code>--genome-name</code></td>
+<td>first contig in the VCF, otherwise first sequence in the BAM header</td>
+<td>Name shown for the reference</td>
+</tr>
+<tr>
+<td><code>-t</code>, <code>--threads</code></td>
+<td><code>10</code></td>
+<td>Threads for samtools</td>
+</tr>
+</tbody>
+</table></div>
+<p>The command prints each stage as it runs and stops at the first error. It:</p>
+<ol>
+<li>checks that the input files and tools exist;</li>
+<li>works out the genome name;</li>
+<li>runs the BAM through <code>samtools collate → fixmate → sort → markdup</code> and indexes the result, so that mate information is consistent and duplicates are flagged;</li>
+<li>copies the reference and indexes it;</li>
+<li>copies the VCF, compresses it if needed, and indexes it;</li>
+<li>writes the viewer page.</li>
+</ol>
+<p>The instance folder then contains:</p>
+<pre><code>Browsers/sampleA/
+├── alignment.markdup.bam        duplicate-marked alignments
+├── alignment.markdup.bam.bai
+├── reference.fa                 copy of your reference (keeps its own file name)
+├── reference.fa.fai
+├── calls.norm.vcf.gz            copy of your VCF (only if -v was given)
+├── calls.norm.vcf.gz.tbi
+├── config.js                    settings for the viewer page
+└── interactive_variants.html    the viewer page
+</code></pre>
+<p>Later, the server adds a <code>bam/</code> folder here for the per-site read sets.</p>
+<p>To serve several samples together, build each one into its own folder under the same data directory:</p>
+<pre><code class="language-bash">build_variant_browser -b A.bam -r ref.fa -v A.vcf.gz -o Browsers/sampleA
+build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
+</code></pre>
+<blockquote>
+<p><strong>Rebuilding an instance.</strong> If you rebuild into a folder that has been used before, delete its <code>bam/</code> folder and clear the cache (section 13.1) first. Otherwise sites you visited earlier are still served from the old reads.</p>
+<p><strong>Instances built with an earlier version</strong> keep working: the viewer loads its newer parts by itself. Rebuild (or run <code>generate_viewer</code> again) only if you want the page itself refreshed.</p>
+</blockquote>
+<hr />
+<h2 id="4-opening-a-browser-instance">4. Opening a browser instance</h2>
+<h3 id="41-start-the-server">4.1 Start the server</h3>
+<pre><code class="language-bash">start_server --data-dir Browsers --port 8000
+</code></pre>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--data-dir</code>, <code>-d</code></td>
+<td>current folder</td>
+<td>Folder that holds the instance folders</td>
+</tr>
+<tr>
+<td><code>--port</code></td>
+<td><code>8000</code></td>
+<td>Port to listen on</td>
+</tr>
+<tr>
+<td><code>--host</code></td>
+<td><code>0.0.0.0</code></td>
+<td>Network address to listen on</td>
+</tr>
+<tr>
+<td><code>--debug</code></td>
+<td>off</td>
+<td>Flask debug mode</td>
+</tr>
+</tbody>
+</table></div>
+<p>Leave the server running while you work. You can add new instance folders without restarting it. The server creates a <code>cache/</code> folder inside the data directory.</p>
+<blockquote>
+<p><strong>Access.</strong> The server has no login, and by default it listens on every network interface. Anyone who can reach the port can read the data and clear the caches. On a shared machine, start it with <code>--host 127.0.0.1</code> and reach it through an SSH tunnel.</p>
+</blockquote>
+<h3 id="42-open-the-page">4.2 Open the page</h3>
+<p>Use the instance folder name followed by a slash:</p>
+<pre><code>http://localhost:8000/sampleA/
+</code></pre>
+<p>The address of the page file itself, <code>http://localhost:8000/sampleA/interactive_variants.html</code>, works too. An address can also point at one variant and a set of filters, for example <code>http://localhost:8000/sampleA/#v=chr1:2450</code>; see <a href="#76-sharing-a-view">section 7.6</a>.</p>
+<p>Chrome, Edge and Firefox are the browsers the project names as supported.</p>
+<h3 id="43-if-the-server-is-on-another-machine">4.3 If the server is on another machine</h3>
+<p>Forward the port over SSH from your own computer, then open the address locally:</p>
+<pre><code class="language-bash">ssh -L 8000:localhost:8000 user@remote.host
+</code></pre>
+<pre><code>http://localhost:8000/sampleA/
+</code></pre>
+<p>If port 8000 is taken on your computer, change the first number (<code>-L 9000:localhost:8000</code>) and open <code>http://localhost:9000/sampleA/</code>.</p>
+<h3 id="44-what-you-see-first">4.4 What you see first</h3>
+<figure><img class="shot" alt="The viewer straight after loading" src="images/first-load.png" /><figcaption>Figure 4. The page straight after loading. The variant list is filled in, but there is no read track until you choose a site.</figcaption></figure>
+<hr />
+<h2 id="5-a-tour-of-the-screen">5. A tour of the screen</h2>
+<p>The left pane is where you choose sites, record your review and set filters. The right pane is the IGV alignment view.</p>
+<figure><img class="shot" alt="Annotated overview of the Allelescope window" src="images/overview-annotated.png" /><figcaption>Figure 5. The main window with a variant selected.</figcaption></figure>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Part</th>
+<th>What it is for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Header gear</td>
+<td>Cached reads and what your browser has saved (<a href="#13-housekeeping-caches-saved-lists-and-presets">section 13</a>)</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Jump to position</strong></td>
+<td>Add positions that are not in the VCF (<a href="#95-add-a-position-that-is-not-in-the-vcf">section 9.5</a>)</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Variants gear</td>
+<td>How the list of sequences is shown, empty sequences, saved variant lists</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Variant toolbar</td>
+<td>Search, status filter, review download, keyboard shortcuts (<a href="#7-reviewing-a-list-of-variants">section 7</a>)</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Sequence tabs</td>
+<td>One tab per reference sequence, with its number of variants (<a href="#8-genomes-with-many-sequences">section 8</a>)</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Variant table</td>
+<td>Status, position, alleles, AF and your note. Click a row to view that site</td>
+</tr>
+<tr>
+<td>7</td>
+<td><strong>Alleles at …</strong> panel</td>
+<td>The alleles at the selected site, with strand and quality, and the allele filter (<a href="#9-alleles-at-a-site">section 9</a>)</td>
+</tr>
+<tr>
+<td>8</td>
+<td>View options</td>
+<td><strong>Flank</strong>, <strong>View as Pairs</strong>, <strong>Strand</strong></td>
+</tr>
+<tr>
+<td>9</td>
+<td><strong>Filters</strong></td>
+<td>Gear for reset, download and presets (<a href="#11-filtering-reads">section 11</a>)</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Filters in use</td>
+<td>The filters currently switched on; the Filters header shows how many</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Pane handle</td>
+<td>Drag the divider to resize the left pane; click the arrow to hide or show it</td>
+</tr>
+<tr>
+<td>12</td>
+<td>Height slider</td>
+<td>Height of the read track</td>
+</tr>
+<tr>
+<td>13</td>
+<td><strong>Selected reads</strong></td>
+<td>Reads you have picked, and what to do with them (<a href="#12-selecting-isolating-and-exporting-reads">section 12</a>)</td>
+</tr>
+<tr>
+<td>14</td>
+<td>Colour key</td>
+<td>What the read colours mean</td>
+</tr>
+<tr>
+<td>15</td>
+<td>IGV toolbar</td>
+<td>Sequence selector, position box, zoom</td>
+</tr>
+<tr>
+<td>16</td>
+<td><strong>Variants</strong> track</td>
+<td>The VCF records. Clicking one selects its row in the table</td>
+</tr>
+<tr>
+<td>17</td>
+<td>Coverage</td>
+<td>Depth of the reads currently shown, with allele colours at mismatching positions</td>
+</tr>
+<tr>
+<td>18</td>
+<td>Reads</td>
+<td>Coloured by strand: pink reads are on the forward strand, blue-violet reads on the reverse strand</td>
+</tr>
+</tbody>
+</table></div>
+<p>Inside the read track, IGV's usual conventions apply, as the colour key above the view says. A coloured tick on a read is a base that differs from the reference (green A, blue C, orange G, red T). A black line through a read is a deletion, and a small purple mark is an insertion. Drag to pan, and use the <strong>+</strong> and <strong>−</strong> buttons or the zoom slider to zoom. IGV draws at most 500 reads per 100 bases; its coverage bar counts all of them.</p>
+<p>Pointing at most controls shows a short explanation.</p>
+<p>To give the alignment view more room, drag the divider or click the arrow on it:</p>
+<figure><img class="shot" alt="The viewer with the left pane hidden" src="images/left-pane-collapsed.png" /><figcaption>Figure 6. Left pane hidden. Click the arrow at the left edge to bring it back. The page remembers this choice.</figcaption></figure>
+<hr />
+<h2 id="6-looking-at-a-variant">6. Looking at a variant</h2>
+<h3 id="61-choose-a-variant">6.1 Choose a variant</h3>
+<ol>
+<li>Click the tab for the reference sequence. The number in brackets is how many variants it has.</li>
+<li>Click a row in the table. The row turns blue, the alignment view moves to that site and loads its reads, and an <strong>Alleles at …</strong> panel for the site appears below the list (<a href="#9-alleles-at-a-site">section 9</a>).</li>
+</ol>
+<p>The first click on a site takes a moment while the server prepares its reads.</p>
+<p>You can also click a variant in the <strong>Variants</strong> track of the alignment view. It selects the matching row, exactly as if you had clicked it in the table. Clicking the variant that is already selected opens IGV's details box for the VCF record instead.</p>
+<p>With the keyboard, <strong>J</strong> and <strong>K</strong> (or the down and up arrows) move to the next and previous variant (<a href="#73-the-keyboard">section 7.3</a>).</p>
+<p>Sequences with no variants are hidden by default. To see them, open the Variants gear and switch on <strong>Show empty chromosomes</strong>:</p>
+<figure><img class="shot" alt="The Variants gear menu" src="images/variants-gear-menu.png" /><figcaption>Figure 7. The Variants gear menu. Sequence list is explained in <a href="#8-genomes-with-many-sequences">section 8</a>; the lower part saves and loads variant lists (<a href="#133-variant-list-presets">section 13.3</a>).</figcaption></figure>
+<h3 id="62-set-how-much-sequence-is-shown">6.2 Set how much sequence is shown</h3>
+<p><strong>Flank (bp)</strong> sets how many bases are shown on each side of the site. The default is 100, and the intended range is 10 to 1000. A new value takes effect the next time you click a row, so click the current row again to apply it.</p>
+<figure><img class="shot" alt="A deletion at the default flank" src="images/variant-deletion.png" /><figcaption>Figure 8. A 7-base deletion with the default flank of 100 bp. Reads carrying the deletion have a black line through the deleted bases, and the coverage dips. The allele panel below the list gives the split between reference and deletion.</figcaption></figure>
+<figure><img class="shot" alt="An insertion with a smaller flank" src="images/variant-insertion-flank40.png" /><figcaption>Figure 9. An insertion with the flank set to 40 bp. At this zoom the reference bases are readable, and reads carrying the insertion have a purple mark.</figcaption></figure>
+<h3 id="63-look-at-pairs">6.3 Look at pairs</h3>
+<p>Tick <strong>View as Pairs</strong> to draw each read together with its mate, joined by a line.</p>
+<figure><img class="shot" alt="View as pairs" src="images/view-as-pairs.png" /><figcaption>Figure 10. View as Pairs. The setting also appears in the list of filters in use.</figcaption></figure>
+<h3 id="64-read-the-details-of-one-read">6.4 Read the details of one read</h3>
+<p>Click a read to open IGV's details box. Besides the standard fields, it lists the tags Allelescope adds, which are what the filters work on:</p>
+<figure><img class="shot" alt="Details of one read" src="images/read-popover.png" /><figcaption>Figure 11. Details of a read. Here <code>XR</code> (pair orientation) is <code>R1F2</code>, <code>XO</code> is 8208 and <code>XA</code> (the allele this read shows at the site) is <code>MC</code>, a mismatch to C. Scroll inside the box for the remaining tags.</figcaption></figure>
+<p>The tags are explained in <a href="#appendix-a-reference-tables">Appendix A</a>.</p>
+<h3 id="65-the-variant-table">6.5 The variant table</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Shows</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Status icon</td>
+<td>Your review status: an empty circle (not reviewed), Confirmed, Doubtful or Artefact (<a href="#7-reviewing-a-list-of-variants">section 7</a>)</td>
+</tr>
+<tr>
+<td><strong>Pos</strong>, <strong>Ref</strong>, <strong>Alt</strong></td>
+<td>The VCF record. Long alleles are shortened; point at one to see it in full</td>
+</tr>
+<tr>
+<td><strong>AF</strong></td>
+<td>The allele fraction from the VCF. If the VCF has none, the fraction seen in the reads appears <em>in italics</em> once you have opened the site</td>
+</tr>
+<tr>
+<td><strong>Note</strong></td>
+<td>Your note, or the VCF <code>INFO</code> summary (for example <code>DP=87</code>) until you write one. Point at the cell to see the VCF <code>INFO</code></td>
+</tr>
+<tr>
+<td>×</td>
+<td>Removes the row. It appears when you point at the row</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li>Click <strong>Pos</strong>, <strong>AF</strong> or the status icon in the header to sort the table; click again to reverse the order.</li>
+<li>Removing a row asks no question; a message in the bottom-right corner offers <strong>Undo</strong>. Your browser remembers the removal (<a href="#132-what-your-browser-remembers">section 13.2</a>).</li>
+</ul>
+<hr />
+<h2 id="7-reviewing-a-list-of-variants">7. Reviewing a list of variants</h2>
+<h3 id="71-statuses-and-notes">7.1 Statuses and notes</h3>
+<p>Every variant can carry a <strong>status</strong>, <strong>Confirmed</strong>, <strong>Doubtful</strong> or <strong>Artefact</strong>, and a <strong>note</strong>. Click the circle at the start of a row to choose a status:</p>
+<figure><img class="shot" alt="Choosing a status" src="images/status-menu.png" /><figcaption>Figure 12. The status menu. The letters on the right are the keyboard shortcuts.</figcaption></figure>
+<p>To write a note, double-click the <strong>Note</strong> cell of a row (or press <strong>E</strong> for the selected row), type, and press Enter. Esc cancels. A note replaces the VCF <code>INFO</code> summary in the cell; the summary is still shown when you point at the cell.</p>
+<figure><img class="shot" alt="A partly reviewed list" src="images/variant-table-review.png" /><figcaption>Figure 13. A partly reviewed list: two variants confirmed, one doubtful with a note, one artefact with a note, and one not yet reviewed. The header counts the variants with a status.</figcaption></figure>
+<p>Statuses and notes are kept in your web browser, separately for each instance, and survive reloading the page. They are not shared with other people or other browsers; to pass them on, download the review (<a href="#75-download-the-review">section 7.5</a>).</p>
+<h3 id="72-find-and-filter-variants">7.2 Find and filter variants</h3>
+<p>The toolbar above the sequence tabs helps with long lists:</p>
+<ul>
+<li><strong>Search</strong> finds positions, alleles and notes (press <strong>/</strong> to jump to it).</li>
+<li>The list next to it shows only variants with one status, for example <strong>Not reviewed</strong>:</li>
+</ul>
+<figure><img class="shot" alt="Only the variants without a status" src="images/variant-table-not-reviewed.png" /><figcaption>Figure 14. The status filter set to Not reviewed.</figcaption></figure>
+<h3 id="73-the-keyboard">7.3 The keyboard</h3>
+<p>Going through a list is fastest with the keyboard. Press <strong>?</strong> (or the keyboard button in the toolbar) for this list:</p>
+<figure><img class="shot" alt="Keyboard shortcuts" src="images/keyboard-shortcuts.png" /><figcaption>Figure 15. The keyboard shortcuts.</figcaption></figure>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>↓ or <strong>J</strong>, ↑ or <strong>K</strong></td>
+<td>Next / previous variant on the current sequence</td>
+</tr>
+<tr>
+<td><strong>N</strong></td>
+<td>Next variant without a status, moving on to the next sequence when needed</td>
+</tr>
+<tr>
+<td><strong>C</strong>, <strong>D</strong>, <strong>X</strong></td>
+<td>Mark Confirmed, Doubtful, Artefact; press again to clear</td>
+</tr>
+<tr>
+<td><strong>U</strong></td>
+<td>Clear the status</td>
+</tr>
+<tr>
+<td><strong>E</strong></td>
+<td>Edit the note</td>
+</tr>
+<tr>
+<td><strong>1</strong> – <strong>9</strong></td>
+<td>Show only the reads with that allele of the allele panel (<a href="#94-filter-by-allele">section 9.4</a>)</td>
+</tr>
+<tr>
+<td><strong>0</strong></td>
+<td>Show reads with any allele</td>
+</tr>
+<tr>
+<td><strong>/</strong></td>
+<td>Search the variant list</td>
+</tr>
+<tr>
+<td><strong>?</strong></td>
+<td>Show or hide the list of shortcuts</td>
+</tr>
+</tbody>
+</table></div>
+<p>Shortcuts are off while you type in a box.</p>
+<h3 id="74-a-review-routine">7.4 A review routine</h3>
+<figure><img class="diagram tall" alt="A review routine for one variant" src="images/diagram-review-workflow.png" /><figcaption>Figure 16. A review routine with the keyboard. Adapt the checks to your own data and thresholds.</figcaption></figure>
+<h3 id="75-download-the-review">7.5 Download the review</h3>
+<p>The download button in the toolbar offers two files:</p>
+<figure><img class="shot" alt="The download menu" src="images/review-download-menu.png" /><figcaption>Figure 17. Downloading the review.</figcaption></figure>
+<ul>
+<li><strong>Review table (.tsv)</strong>: one line per variant with sequence, position, REF, ALT, VCF <code>INFO</code>, AF (and whether it came from the VCF or the reads), status, note and, for the sites opened in this session, the alleles seen with their counts and strand split. It opens in any spreadsheet program.</li>
+<li><strong>VCF with review (.vcf)</strong>: the instance's VCF with two <code>INFO</code> fields added to the reviewed records: <code>REVIEW</code> (<code>confirmed</code>, <code>doubtful</code> or <code>artefact</code>) and <code>REVIEW_NOTE</code>. Characters a VCF cannot hold in a note are percent-encoded: <code>%20</code> for a space, <code>%3B</code> for <code>;</code>, <code>%2C</code> for <code>,</code>. Positions you added by hand are not in the VCF; they are in the .tsv.</li>
+</ul>
+<h3 id="76-sharing-a-view">7.6 Sharing a view</h3>
+<p>The address in the browser's address bar records what you are looking at: the variant, the filters, the allele filter and the subsample size. For example</p>
+<pre><code>http://localhost:8000/demo/#v=demo_seg1:5000&amp;on=retain-duplicates&amp;xa=MA
+</code></pre>
+<p>shows <code>demo_seg1:5000</code> with duplicates excluded and only the reads carrying an A. Send the address to a colleague on the same server, or use the link button in the allele panel to copy it, and they see the same view. A position that is not in their variant list is added to it.</p>
+<p>The browser's <strong>Back</strong> and <strong>Forward</strong> buttons move between the variants you have opened.</p>
+<hr />
+<h2 id="8-genomes-with-many-sequences">8. Genomes with many sequences</h2>
+<p>Segmented viruses (influenza has eight segments), multi-chromosome genomes and assemblies with many contigs give the variant list one tab per sequence. With more than a few, the tabs do not fit across the pane:</p>
+<figure><img class="shot" alt="Tabs across the top, eight segments" src="images/segments-horizontal.png" /><figcaption>Figure 18. Eight influenza-like segments as tabs across the top: only three are visible, and the rest are off to the right.</figcaption></figure>
+<h3 id="81-tabs-down-the-side">8.1 Tabs down the side</h3>
+<p>When the tabs do not fit in one row, Allelescope puts them in a column beside the variant table. Each tab shows the sequence name and its number of variants:</p>
+<figure><img class="shot" alt="Tabs down the side" src="images/segments-vertical.png" /><figcaption>Figure 19. The same eight segments as tabs down the side, with segment 4 selected.</figcaption></figure>
+<figure><img class="shot" alt="The whole window with a segmented genome" src="images/segments-overview.png" /><figcaption>Figure 20. The whole window with a variant on segment 4 selected.</figcaption></figure>
+<p>Long names are shortened; point at a tab to see the full name. The column scrolls when there are more sequences than fit.</p>
+<h3 id="82-many-contigs">8.2 Many contigs</h3>
+<p>From nine sequences on, a <strong>Find sequence</strong> box appears above the column. Type part of a name to list only the sequences that match:</p>
+<figure><img class="shot" alt="41 contigs" src="images/segments-many.png" /><figcaption>Figure 21. An assembly with 41 contigs.</figcaption></figure>
+<figure><img class="shot" alt="Finding a contig by name" src="images/segments-search.png" /><figcaption>Figure 22. Typing <code>NODE</code> finds the one contig with a long assembler name, shortened in the tab.</figcaption></figure>
+<h3 id="83-a-drop-down-list">8.3 A drop-down list</h3>
+<p>If you would rather keep the full width for the table, choose a drop-down list instead:</p>
+<figure><img class="shot" alt="The sequence list as a drop-down" src="images/segments-dropdown.png" /><figcaption>Figure 23. The sequence list as a drop-down.</figcaption></figure>
+<h3 id="84-choosing-the-layout">8.4 Choosing the layout</h3>
+<p>The layout is set under <strong>Sequence list</strong> in the Variants gear:</p>
+<figure><img class="shot" alt="The Sequence list setting" src="images/segments-layout-menu.png" /><figcaption>Figure 24. The Sequence list setting in the Variants gear.</figcaption></figure>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Automatic</strong> (default)</td>
+<td>Tabs across the top while they all fit in one row, otherwise tabs down the side. Checked again when you resize the pane.</td>
+</tr>
+<tr>
+<td><strong>Tabs across the top</strong></td>
+<td>One row, scrolling sideways when needed</td>
+</tr>
+<tr>
+<td><strong>Tabs down the side</strong></td>
+<td>A column beside the table, with <strong>Find sequence</strong> from nine sequences</td>
+</tr>
+<tr>
+<td><strong>Drop-down list</strong></td>
+<td>A single list above the table</td>
+</tr>
+</tbody>
+</table></div>
+<p>Your browser remembers the choice. <strong>Show empty chromosomes</strong> works with every layout.</p>
+<p>Other things that help with many sequences:</p>
+<ul>
+<li><strong>N</strong> goes to the next variant without a status across all sequences, switching tabs for you (<a href="#73-the-keyboard">section 7.3</a>).</li>
+<li><strong>Search</strong> in the variant toolbar filters the tables of every sequence; switch tabs to see the matches on other sequences.</li>
+<li>Clicking a tab only switches the table; the alignment view moves when you click a variant.</li>
+</ul>
+<hr />
+<h2 id="9-alleles-at-a-site">9. Alleles at a site</h2>
+<h3 id="91-the-allele-panel">9.1 The allele panel</h3>
+<p>Whenever you select a variant or add a position, the <strong>Alleles at …</strong> panel below the variant list shows every allele the reads carry at that site (item 7 in Figure 5).</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tick box</td>
+<td>Choose the allele for filtering</td>
+</tr>
+<tr>
+<td>Type</td>
+<td><code>REF</code> reference base, <code>SNP</code> mismatch, <code>DEL</code> deletion, <code>INS</code> insertion, <code>?</code> anything else</td>
+</tr>
+<tr>
+<td>Allele</td>
+<td>The base for REF and SNP, the length for DEL, the inserted bases for INS</td>
+</tr>
+<tr>
+<td><code>ALT</code> badge</td>
+<td>Marks the allele that matches the ALT of the VCF record. Positions added by hand have no VCF record, so no badge</td>
+</tr>
+<tr>
+<td>Bar and numbers</td>
+<td>Number of read pairs showing the allele, and their share</td>
+</tr>
+<tr>
+<td>Second line</td>
+<td>Reads on the forward and reverse strand, mean base quality at the site (<code>BQ</code>) and mean mapping quality (<code>MQ</code>)</td>
+</tr>
+</tbody>
+</table></div>
+<p>Counts are per read pair, not per read: when both mates cross the position, the pair is counted once, using the read that crosses the site.</p>
+<p>The row above the list controls which alleles are listed: <strong>All</strong>, the <strong>Top</strong> <em>N</em> by count (the default is the top 5), or those at or above a percentage. Alleles hidden this way are also unticked.</p>
+<h3 id="92-strand-and-quality">9.2 Strand and quality</h3>
+<p>The second line of each allele shows whether the allele is supported on both strands and by good-quality bases:</p>
+<figure><img class="shot" alt="Allele panel at a strand-biased site" src="images/allele-panel-strand.png" /><figcaption>Figure 25. At <code>demo_seg1:5000</code> the ALT allele A is seen on 0 forward and 13 reverse reads, while the reference T is on 54 forward and 21 reverse reads. The ALT allele is marked ⚠ strand.</figcaption></figure>
+<ul>
+<li><strong><code>15+ / 11−</code></strong>: reads on the forward and reverse strand.</li>
+<li><strong><code>BQ 36</code></strong>: mean base quality of the allele's base at the site. It is left out for deletions, which have no base there.</li>
+<li><strong><code>MQ 60</code></strong>: mean mapping quality of the reads.</li>
+<li><strong>⚠ strand</strong>: the allele is mostly on one strand while the other reads at the site are not. Allelescope marks it when Fisher's exact test comparing the allele's strand split with that of the other reads gives p &lt; 0.01 and at most 15 % of the allele's reads are on one strand. This is a common sign of an artefact. Point at the mark for the p-value.</li>
+</ul>
+<h3 id="93-insertions-and-deletions">9.3 Insertions and deletions</h3>
+<p>A VCF gives the base <em>before</em> an insertion or deletion as its position. At that base every read still shows the reference, so it says nothing about the indel. For indel records Allelescope therefore compares the reads one base further on: the first deleted base, or the base that follows the insertion point. The panel says which position it used (Figure 8), and the view stays centred on the VCF position.</p>
+<h3 id="94-filter-by-allele">9.4 Filter by allele</h3>
+<p>The quickest way: <strong>click an allele</strong> in the panel (anywhere except its tick box), or press its number on the keyboard. The track then shows only read pairs carrying that allele. Click it again, or press <strong>0</strong>, to show all reads.</p>
+<figure><img class="shot" alt="Allele filter applied to a deletion" src="images/allele-filter-deletion.png" /><figcaption>Figure 26. The deletion at 3300 after clicking <code>DEL 7</code>: every read crossing the site carries the deletion.</figcaption></figure>
+<p>To keep several alleles at once:</p>
+<ol>
+<li>Tick the alleles you want to see. <strong>All</strong> and <strong>None</strong> tick or untick every listed allele.</li>
+<li>Click <strong>Filter</strong>.</li>
+</ol>
+<p>Mates are kept with their reads. The allele filter works together with the other filters and is listed with them, for example <code>require allele DEL 7</code>.</p>
+<p>It belongs to the site where you set it, because an allele name such as <code>DEL 7</code> only means something there. When you select another site the allele filter is cleared, and a short message tells you so.</p>
+<p>To clear it yourself, do any one of these:</p>
+<ul>
+<li>click the allele again, or press <strong>0</strong>;</li>
+<li>click the <strong>×</strong> on its badge in the list of filters in use;</li>
+<li>use <strong>Reset filters</strong> or <strong>Clear All</strong>;</li>
+<li>click <strong>Filter</strong> with no allele ticked.</li>
+</ul>
+<h3 id="95-add-a-position-that-is-not-in-the-vcf">9.5 Add a position that is not in the VCF</h3>
+<ol>
+<li>Select the tab for the right reference sequence.</li>
+<li>Type one or more 1-based positions in <strong>Jump to position</strong>, separated by spaces, commas or semicolons.</li>
+<li>Click <strong>Add</strong> or press Enter.</li>
+</ol>
+<p>Each position is added to the table as a yellow row, the view moves to it, and the allele panel shows what the reads carry there:</p>
+<figure><img class="shot" alt="A manually added position with its allele panel" src="images/manual-position-alleles.png" /><figcaption>Figure 27. Position 2800 added by hand. The allele panel shows that most read pairs carry the reference base, with two low-frequency alternatives.</figcaption></figure>
+<p>The allele filter works the same way at these positions:</p>
+<figure><img class="shot" alt="Allele filter applied at a position added by hand" src="images/allele-filter-applied.png" /><figcaption>Figure 28. Only the read pairs carrying the two alternative bases at 2800, chosen with the tick boxes and Filter.</figcaption></figure>
+<p><strong>Clear</strong> removes all manual rows from the current tab.</p>
+<p>Things to know:</p>
+<ul>
+<li>A position that is already in the list is refused with a message. If you typed several positions, the ones after the refused one are not added; enter them again.</li>
+<li>Your browser remembers manual rows, and they appear in every instance on the same server (<a href="#132-what-your-browser-remembers">section 13.2</a>).</li>
+<li>Nothing is written back to the VCF.</li>
+</ul>
+<hr />
+<h2 id="10-very-deep-sites">10. Very deep sites</h2>
+<p>At very high depth, for example a viral sample at 100,000x or more, showing every read is slow to prepare and impossible to read. Before Allelescope prepares a site for the first time, it counts the read pairs that cross it. If there are more than 2,000, it asks what to show:</p>
+<figure><img class="shot" alt="The subsampling question" src="images/deep-site-prompt.png" /><figcaption>Figure 29. A site crossed by 195,351 read pairs.</figcaption></figure>
+<ul>
+<li><strong>Subsample</strong> shows the number of read pairs in the box. 2,000 is suggested; type another number if you like. The pairs are chosen at random, but the choice is fixed: a read always comes with its mate and split segments, and the same reads are shown every time the site is opened.</li>
+<li><strong>Use all reads</strong> shows every read pair. At this depth that takes noticeably longer to prepare and to draw.</li>
+</ul>
+<p>Tick <strong>Do the same for other deep sites in this session</strong> to stop being asked until the page is reloaded.</p>
+<p><strong>The allele counts always use every read</strong>, whichever you choose. The allele panel says when a site is subsampled:</p>
+<figure><img class="shot" alt="A subsampled site" src="images/deep-site-subsampled.png" /><figcaption>Figure 30. The site subsampled to 2,000 read pairs. The counts below the notice, including the strand split, come from all 195,351 pairs.</figcaption></figure>
+<ul>
+<li><strong>Show all reads</strong> switches the site to the full read set. A deep site shown in full has a <strong>Subsample to 2,000</strong> button instead.</li>
+<li>Your browser remembers the choice for each site of each instance, and the address records it (<a href="#76-sharing-a-view">section 7.6</a>).</li>
+<li>Filters, <strong>Show only these</strong> / <strong>Hide these</strong> and <strong>Export</strong> work on the reads being shown.</li>
+<li>The subsampled and full versions of a site are kept separately on the server, so switching back to one you have already opened is quick.</li>
+</ul>
+<p>As a guide, on the test sample in <a href="#appendix-b-the-datasets-used-in-the-figures">Appendix B</a> (198,000 reads at the site) preparing a 2,000-pair subsample took about 4 seconds and preparing all reads about 16 seconds.</p>
+<hr />
+<h2 id="11-filtering-reads">11. Filtering reads</h2>
+<h3 id="111-how-filters-combine">11.1 How filters combine</h3>
+<p>Every filter must be satisfied for a read to be shown:</p>
+<figure><img class="diagram tall" alt="Order in which filters are applied" src="images/diagram-filter-order.png" /><figcaption>Figure 31. How the read set for a site is narrowed down.</figcaption></figure>
+<p>A change takes effect immediately: the track reloads with the new read set. Filters stay on as you move between sites. Two things are tied to one site and are reset when you select another: the allele filter (<a href="#94-filter-by-allele">section 9.4</a>) and <strong>Show only these</strong> / <strong>Hide these</strong> for selected reads (<a href="#122-use-the-selection">section 12.2</a>).</p>
+<p>Filters return to their defaults when the page is reloaded, so save combinations you use often as presets (<a href="#117-reset-download-and-presets">section 11.7</a>), or keep the address of the view (<a href="#76-sharing-a-view">section 7.6</a>).</p>
+<h3 id="112-the-three-sections">11.2 The three sections</h3>
+<p>Open a section by clicking its title. Only one is open at a time.</p>
+<figure><img class="shot" alt="The three filter sections" src="images/filter-sections.png" /><figcaption>Figure 32. The three sections of the Filters card, each shown open.</figcaption></figure>
+<h3 id="113-strand">11.3 Strand</h3>
+<p>The <strong>Strand</strong> selector in the view options limits the reads to one strand. <strong>Plus (+)</strong> shows forward-strand reads and <strong>Minus (-)</strong> shows reverse-strand reads.</p>
+<figure><img class="shot" alt="The strand selector at a strand-biased site" src="images/strand-comparison.png" /><figcaption>Figure 33. The same site with each Strand setting. The alternative base (green A in the reads) is carried only by reverse-strand reads, which is a typical sign of an artefact. With only those reads shown it is frequent enough for the coverage bar to colour the site. The allele panel shows the same thing as numbers (Figure 25).</figcaption></figure>
+<h3 id="114-numeric-limits">11.4 Numeric limits</h3>
+<p><strong>Filter by Value</strong> and <strong>BAQ Filters</strong> hold numeric limits. Every box is empty to start with, and an empty box means no limit, so nothing is filtered until you type a number. A number is applied as typed, including 0: a maximum edit distance of 0 keeps only reads that match the reference exactly.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Box</th>
+<th>Keeps reads with</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Soft Clip Length</strong> Min / Max</td>
+<td>at least / at most this many soft-clipped bases (both ends added together)</td>
+</tr>
+<tr>
+<td><strong>Edit Distance</strong> Min / Max</td>
+<td>an edit distance (<code>NM</code>) of at least / at most this value</td>
+</tr>
+<tr>
+<td><strong>Mapping Quality</strong> Min</td>
+<td>a mapping quality of at least this value</td>
+</tr>
+<tr>
+<td><strong>BAQ value</strong> Min / Max</td>
+<td>a base alignment quality at the selected site of at least / at most this value</td>
+</tr>
+</tbody>
+</table></div>
+<p>About BAQ:</p>
+<ul>
+<li>Base alignment quality is the base quality lowered where the alignment around the base is uncertain. Allelescope reads it from the <code>BQ</code> tag that samtools adds when a site is prepared.</li>
+<li>The limit looks at the reads that cover the site. A read pair is kept or removed as a whole, so a mate that does not reach the site follows the read that does.</li>
+<li>For a read with a deletion at the site, the median over its neighbouring bases is used.</li>
+</ul>
+<h3 id="115-flags-and-read-types">11.5 Flags and read types</h3>
+<p>Each property in <strong>Flags and read types</strong> has three settings:</p>
+<ul>
+<li><strong>any</strong>: no filter (the default);</li>
+<li><strong>require</strong>: only reads with the property are shown;</li>
+<li><strong>exclude</strong>: reads with the property are hidden.</li>
+</ul>
+<p>Point at a property's name to see what it means.</p>
+<figure><img class="shot" alt="Duplicates and mates excluded" src="images/filters-flags-set.png" /><figcaption>Figure 34. Duplicates and mates set to exclude; everything else is left at any.</figcaption></figure>
+<p><strong>SAM flags</strong> come from the BAM:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Reads it refers to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Duplicates</td>
+<td>Flagged as duplicates by the build step</td>
+</tr>
+<tr>
+<td>Proper-pair flag</td>
+<td>Flagged as properly paired by the aligner</td>
+</tr>
+<tr>
+<td>Secondary</td>
+<td>Secondary alignments</td>
+</tr>
+<tr>
+<td>Supplementary</td>
+<td>Supplementary alignments (parts of split reads)</td>
+</tr>
+<tr>
+<td>QC failed</td>
+<td>Failed the sequencer's quality check</td>
+</tr>
+<tr>
+<td>Paired</td>
+<td>Came from paired-end sequencing</td>
+</tr>
+<tr>
+<td>Soft clips</td>
+<td>Reads with at least one soft-clipped base. This is separate from the Soft Clip Length boxes</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Read types (XO tag)</strong> are Allelescope's own classification of each read relative to the site (see Figure 3):</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Property</th>
+<th>Reads it refers to</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>overlap</td>
+<td>Reads that cross the site, from pairs in which <strong>both</strong> mates cross it</td>
+</tr>
+<tr>
+<td>mates</td>
+<td>Mates that were fetched because their partner crosses the site, and that do not cross it themselves</td>
+</tr>
+<tr>
+<td>split mates</td>
+<td>The other part of a split read, fetched from wherever it maps</td>
+</tr>
+<tr>
+<td>split reads</td>
+<td>Any read that is part of a split alignment (has an <code>SA</code> tag)</td>
+</tr>
+<tr>
+<td>proper</td>
+<td>Flagged as properly paired <strong>and</strong> the mates face each other, whichever of read 1 and read 2 is on the forward strand (F1R2 or R1F2)</td>
+</tr>
+<tr>
+<td>improper</td>
+<td>Every other paired read</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Pair orientation</strong> selects by the orientation of the pair: <code>F1R2</code>, <code>R1F2</code>, <code>F1F2</code>, <code>R1R2</code>. F and R are forward and reverse; 1 and 2 are read 1 and read 2.</p>
+<h3 id="116-the-filters-in-use">11.6 The filters in use</h3>
+<p>The filters that are switched on are listed at the top of the Filters card, and the card's header shows how many there are. Click the <strong>×</strong> on a badge to switch that one off, or <strong>Clear All</strong> to reset everything.</p>
+<figure><img class="shot" alt="Filters applied" src="images/filters-active.png" /><figcaption>Figure 35. Duplicates and mates excluded and a minimum mapping quality of 20, leaving non-duplicate reads that cross the site.</figcaption></figure>
+<p>Each badge states the condition that is applied:</p>
+<ul>
+<li><strong><code>require …</code></strong> (blue): only reads with this property are shown. These come from properties set to require, from minimums (<code>require MAPQ ≥ 20</code>), from the Strand selector and from the allele filter.</li>
+<li><strong><code>exclude …</code></strong> (red): reads with this property are hidden. These come from properties set to exclude (<code>exclude duplicates</code>) and from maximums (<code>exclude soft clip &gt; 5</code>).</li>
+<li><strong><code>view as pairs</code></strong> is shown too, although it changes only how reads are drawn.</li>
+</ul>
+<h3 id="117-reset-download-and-presets">11.7 Reset, download and presets</h3>
+<p>Open the gear on the Filters card:</p>
+<figure><img class="shot" alt="The Filters gear menu" src="images/filters-gear-menu.png" /><figcaption>Figure 36. The Filters gear menu.</figcaption></figure>
+<ul>
+<li><strong>Reset filters</strong> returns every filter to its default and clears the allele filter.</li>
+<li><strong>Download settings (.json)</strong> saves the current filter settings as a file.</li>
+<li>To <strong>save</strong> the current settings as a preset, type a name and click <strong>Save Current</strong>.</li>
+<li>To <strong>load</strong> a preset, choose it in the list and click <strong>Load</strong>. <strong>Delete</strong> removes it; a message offers <strong>Undo</strong>.</li>
+</ul>
+<p>Presets are stored by your web browser on your computer. They are not shared with other people or other browsers. Presets saved with an earlier version are converted when you load them. The allele filter is not part of a preset.</p>
+<hr />
+<h2 id="12-selecting-isolating-and-exporting-reads">12. Selecting, isolating and exporting reads</h2>
+<h3 id="121-select-reads">12.1 Select reads</h3>
+<p>Hold <strong>Shift</strong> and click a read in the alignment view. The read gets a green outline and its name is added to the <strong>Selected reads</strong> bar above the alignment view. You can also paste a read name into the box there and click <strong>Add</strong> or press Enter.</p>
+<figure><img class="shot" alt="Reads selected in the alignment view" src="images/read-selection.png" /><figcaption>Figure 37. Two reads selected. Their names are listed in the bar above the alignment view, with the actions for them.</figcaption></figure>
+<p><strong>[✕]</strong> next to a name removes that read from the selection. <strong>Clear List</strong> empties the selection and restores the full read set; a message offers <strong>Undo</strong>.</p>
+<h3 id="122-use-the-selection">12.2 Use the selection</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Button</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Show only these</strong></td>
+<td>Shows only the selected reads and their mates.</td>
+</tr>
+<tr>
+<td><strong>Hide these</strong></td>
+<td>Hides the selected reads and their mates.</td>
+</tr>
+<tr>
+<td><strong>Export</strong></td>
+<td>Downloads the selected reads as a BAM file.</td>
+</tr>
+</tbody>
+</table></div>
+<figure><img class="shot" alt="Show only these" src="images/read-selection-show-only.png" /><figcaption>Figure 38. After Show only these: only the selected read pairs remain.</figcaption></figure>
+<figure><img class="shot" alt="Hide these" src="images/read-selection-hide.png" /><figcaption>Figure 39. After Hide these: the selected read pairs are gone and everything else is shown.</figcaption></figure>
+<p>Selection works by read name, so a read and its mate always go together. <strong>Show only these</strong> and <strong>Hide these</strong> act on the selection as it stands when you click. If you change the selection afterwards, click the button again.</p>
+<p>Both apply to the site you are viewing. When you select another site the full read set is shown again and a short message says so. Your selection is kept, so you can use it again there.</p>
+<p><strong>Export</strong> saves a file named <code>selected_reads_&lt;sequence&gt;_&lt;position&gt;.bam</code> for the site you are viewing. It opens in a new browser tab, so allow pop-ups for the page if nothing downloads. The file holds the selected reads that also pass the filters in force, so reset the filters first if you want every selected read. The file has no index; run <code>samtools index</code> on it before loading it elsewhere.</p>
+<p>The <strong>Clear Highlights</strong> button does nothing in this version. Use <strong>Clear List</strong>.</p>
+<hr />
+<h2 id="13-housekeeping-caches-saved-lists-and-presets">13. Housekeeping: caches, saved lists and presets</h2>
+<h3 id="131-the-header-gear">13.1 The header gear</h3>
+<figure><img class="shot" alt="The header gear menu" src="images/header-gear-menu.png" /><figcaption>Figure 40. The header gear menu. Each item says what it affects.</figcaption></figure>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Item</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Server: cached filtered reads → Delete for <em>instance</em></strong></td>
+<td>Deletes the filtered read sets kept for this instance (their size is shown). They are rebuilt when needed; prepared sites are kept.</td>
+</tr>
+<tr>
+<td><strong>Delete for all instances</strong></td>
+<td>The same for every instance on this server, after asking. This affects other people using the server.</td>
+</tr>
+<tr>
+<td><strong>This browser → Forget added and removed variants</strong></td>
+<td>Forgets your edits to the variant list in every instance on this server. A message offers <strong>Undo</strong>.</td>
+</tr>
+<tr>
+<td><strong>Forget review statuses and notes</strong></td>
+<td>Forgets the review of this instance only. A message offers <strong>Undo</strong>.</td>
+</tr>
+<tr>
+<td><strong>Reset everything saved in this browser</strong></td>
+<td>After asking, forgets everything Allelescope has saved in your browser (reviews of every instance, list edits, presets and choices) and reloads the page. This cannot be undone.</td>
+</tr>
+</tbody>
+</table></div>
+<p>Questions are asked in a box on the page; press Enter to confirm or Esc to cancel. Clearing a cache is always safe.</p>
+<h3 id="132-what-your-browser-remembers">13.2 What your browser remembers</h3>
+<p>Some things are saved in your own web browser and reappear the next time you open the page from the same browser:</p>
+<ul>
+<li>review statuses and notes, for each instance;</li>
+<li>your edits to the variant list: positions you added and rows you removed;</li>
+<li>variant-list presets and filter presets;</li>
+<li>the subsampling choice for each deep site;</li>
+<li>the Sequence list layout, and whether the left pane is hidden.</li>
+</ul>
+<p>The filter settings themselves are not restored when the page reloads; the address of a view keeps them (<a href="#76-sharing-a-view">section 7.6</a>).</p>
+<p>Your browser stores the list edits, not the list. Each instance applies them to its own variants, so with several instances on one server:</p>
+<ul>
+<li>a position you added by hand appears in every instance that has that sequence;</li>
+<li>a row you removed is hidden in every instance that has a variant at the same sequence and position;</li>
+<li>apart from that, each instance shows its own calls.</li>
+</ul>
+<h3 id="133-variant-list-presets">13.3 Variant-list presets</h3>
+<p>The Variants gear (Figure 7) can keep several named variant lists, for example the sites still to be checked:</p>
+<ul>
+<li>Type a name and click <strong>Save Current</strong> to save the list as it is now, including manual rows and without removed rows.</li>
+<li>Choose a saved list and click <strong>Load</strong> to show that list. Loading replaces your current edits with the difference between the saved list and this instance's own variants; a message offers <strong>Undo</strong>.</li>
+<li><strong>Delete</strong> removes the saved list; a message offers <strong>Undo</strong>.</li>
+</ul>
+<p>Presets are stored in your browser and are offered in every instance on the server.</p>
+<h3 id="134-where-things-are-stored">13.4 Where things are stored</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>What</th>
+<th>Where</th>
+<th>How to remove it</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Per-site read sets</td>
+<td><code>&lt;instance&gt;/bam/</code> on the server</td>
+<td>Delete the folder. The cache items do not touch it. After an upgrade that changes the read tags or allele table, the server empties it once by itself.</td>
+</tr>
+<tr>
+<td>Filtered read sets and exports</td>
+<td><code>&lt;data-dir&gt;/cache/&lt;instance&gt;/</code> on the server</td>
+<td>Header gear → <strong>Delete for <em>instance</em></strong> or <strong>Delete for all instances</strong></td>
+</tr>
+<tr>
+<td>Reviews, list edits, presets and choices</td>
+<td>Your web browser</td>
+<td>Header gear → the <strong>This browser</strong> items</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="14-known-issues-in-this-version">14. Known issues in this version</h2>
+<p>Each of these was observed with the version this manual covers.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Area</th>
+<th>What happens</th>
+<th>What to do</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clear Highlights</td>
+<td>The button does nothing.</td>
+<td>Use <strong>Clear List</strong>.</td>
+</tr>
+<tr>
+<td>Read names in the selection</td>
+<td>Clicking a name does not move the view.</td>
+<td>Find the read by its green outline.</td>
+</tr>
+<tr>
+<td>Several manual positions</td>
+<td>Entry stops at the first position that is already listed.</td>
+<td>Enter the remaining positions again.</td>
+</tr>
+<tr>
+<td>SNP labels</td>
+<td>Shown as <code>REF</code> when the input BAM has no <code>MD</code> tags.</td>
+<td>Run <code>samtools calmd</code> before building.</td>
+</tr>
+<tr>
+<td>Filters after a reload</td>
+<td>Filters start empty when the page is reloaded.</td>
+<td>Use presets, or keep the address of the view.</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="15-worked-examples">15. Worked examples</h2>
+<p>The examples use the demo dataset (<a href="#appendix-b-the-datasets-used-in-the-figures">Appendix B</a>), so you can repeat them.</p>
+<h3 id="151-is-the-variant-on-both-strands">15.1 Is the variant on both strands?</h3>
+<ol>
+<li>Click the variant at <code>demo_seg1:5000</code>.</li>
+<li>Look at the allele panel: the ALT allele A reads <code>0+ / 13−</code> and is marked <strong>⚠ strand</strong> (Figure 25).</li>
+<li>To see it in the reads, set <strong>Strand</strong> to <strong>Plus (+)</strong>, then to <strong>Minus (-)</strong>: the green A appears only with <strong>Minus (-)</strong> (Figure 33).</li>
+<li>Set <strong>Strand</strong> back to <strong>Both</strong> and press <strong>X</strong> to mark the variant as an artefact; press <strong>E</strong> to note why.</li>
+</ol>
+<h3 id="152-does-the-support-survive-without-duplicates">15.2 Does the support survive without duplicates?</h3>
+<ol>
+<li>Click a variant.</li>
+<li>Open <strong>Flags and read types</strong> and set <strong>Duplicates</strong> and <strong>mates</strong> to <strong>exclude</strong> (Figure 34).</li>
+<li>The track now holds only non-duplicate reads that cross the site, and the list of filters in use shows <code>exclude duplicates</code> and <code>exclude mates</code> (Figure 35). Compare the allele balance in the coverage bar with what you saw before.</li>
+<li>Click <strong>Clear All</strong>.</li>
+</ol>
+<h3 id="153-which-reads-carry-a-deletion">15.3 Which reads carry a deletion?</h3>
+<ol>
+<li>Click the deletion at <code>demo_seg1:3300</code>.</li>
+<li>In the allele panel, click <code>DEL 7</code>, the row marked <code>ALT</code> (Figure 26), or press its number.</li>
+<li>Shift-click any reads you want to keep a record of and click <strong>Export</strong>.</li>
+<li>Select the next variant. The allele filter is cleared for you.</li>
+</ol>
+<h3 id="154-where-does-the-rest-of-a-split-read-map">15.4 Where does the rest of a split read map?</h3>
+<ol>
+<li>Add position <code>3700</code> on <code>demo_seg1</code>.</li>
+<li>Open <strong>Flags and read types</strong> and set <strong>split reads</strong> to <strong>require</strong>. The reads that remain all stop at the same base:</li>
+</ol>
+<figure><img class="shot" alt="Split reads at a breakpoint" src="images/split-reads-site.png" /><figcaption>Figure 41. Only split reads shown. They all end at the breakpoint.</figcaption></figure>
+<ol start="3">
+<li>The other parts of these reads are in the same track but on another sequence. Click a read: the details box lists its <strong>Supplementary Alignments</strong>, which give the other location. Type that region into the IGV position box, here <code>demo_seg2:700-1100</code>:</li>
+</ol>
+<figure><img class="shot" alt="The other half of the split reads" src="images/split-reads-partner.png" /><figcaption>Figure 42. The partner segments of the same reads on <code>demo_seg2</code>.</figcaption></figure>
+<ol start="4">
+<li>Set <strong>split reads</strong> back to <strong>any</strong> when you are done.</li>
+</ol>
+<h3 id="155-are-there-pairs-with-an-unusual-orientation">15.5 Are there pairs with an unusual orientation?</h3>
+<ol>
+<li>Add position <code>5300</code> on <code>demo_seg1</code>.</li>
+<li>Tick <strong>View as Pairs</strong>.</li>
+<li>In <strong>Flags and read types</strong>, set <strong>F1F2</strong> under Pair orientation to <strong>require</strong>. Only pairs with both mates on the forward strand remain:</li>
+</ol>
+<figure><img class="shot" alt="Pairs with both mates on the forward strand" src="images/orientation-f1f2.png" /><figcaption>Figure 43. Pairs in F1F2 orientation.</figcaption></figure>
+<h3 id="156-review-a-whole-list">15.6 Review a whole list</h3>
+<ol>
+<li>Press <strong>N</strong> to open the first variant without a status.</li>
+<li>Check the allele panel and the reads, and press <strong>C</strong>, <strong>D</strong> or <strong>X</strong>; press <strong>E</strong> to add a note.</li>
+<li>Press <strong>N</strong> again. Repeat until a message says every variant has a status. With a segmented genome, <strong>N</strong> moves on to the next segment by itself.</li>
+<li>Download the review as <code>.tsv</code> or <code>.vcf</code> (<a href="#75-download-the-review">section 7.5</a>).</li>
+</ol>
+<hr />
+<h2 id="16-troubleshooting">16. Troubleshooting</h2>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Problem</th>
+<th>Likely cause and fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>The page is unstyled and has no alignment view.</td>
+<td>The browser cannot reach <code>cdn.jsdelivr.net</code>. Check the internet connection or firewall on the computer showing the page.</td>
+</tr>
+<tr>
+<td>The read track is empty at a site that should have reads.</td>
+<td>A filter is excluding every read. Check the filters in use and click <strong>Clear All</strong>.</td>
+</tr>
+<tr>
+<td>A variant is missing from the list, or a yellow manual row appears that you did not add here.</td>
+<td>Edits to the list are shared between instances (section 13.2). Header gear → <strong>Forget added and removed variants</strong> restores the full list.</td>
+</tr>
+<tr>
+<td>"Could not read <em>position</em>. Is it beyond the end of the sequence?"</td>
+<td>The position is beyond the end of the sequence or has no reads, or the wrong sequence tab was selected when you added it.</td>
+</tr>
+<tr>
+<td>Your statuses and notes are gone.</td>
+<td>They are kept per browser and per instance. Another browser, a private window or <strong>Reset everything saved in this browser</strong> starts empty. Download the review to keep it (<a href="#75-download-the-review">section 7.5</a>).</td>
+</tr>
+<tr>
+<td>Keyboard shortcuts do nothing.</td>
+<td>The cursor is in a box. Click an empty part of the page, or press Esc.</td>
+</tr>
+<tr>
+<td>A site still shows old reads after the instance was rebuilt.</td>
+<td>Delete <code>&lt;instance&gt;/bam/</code> and clear the cache.</td>
+</tr>
+<tr>
+<td>Export does nothing.</td>
+<td>The download opens in a new tab. Allow pop-ups for the page.</td>
+</tr>
+<tr>
+<td>The first click on a site is slow.</td>
+<td>Expected. The reads for a site are prepared on the first visit; at very deep sites consider subsampling (<a href="#10-very-deep-sites">section 10</a>).</td>
+</tr>
+<tr>
+<td><code>build_variant_browser</code> stops with <code>'samtools' not found in PATH</code>.</td>
+<td>Install samtools, or activate the environment that has it.</td>
+</tr>
+<tr>
+<td><code>tabix</code> fails during the build.</td>
+<td>The VCF is not sorted. Sort it with <code>bcftools sort</code>.</td>
+</tr>
+<tr>
+<td>The build cannot work out a genome name.</td>
+<td>Pass one with <code>-g</code>.</td>
+</tr>
+<tr>
+<td>The page cannot be reached from your computer.</td>
+<td>The server is on another machine. Set up the SSH tunnel in section 4.3.</td>
+</tr>
+</tbody>
+</table></div>
+<hr />
+<h2 id="appendix-a-reference-tables">Appendix A: Reference tables</h2>
+<h3 id="a1-tags-allelescope-adds-to-reads">A.1 Tags Allelescope adds to reads</h3>
+<p>These appear in the read details box (Figure 11) and in exported BAM files.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Tag</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>XO</code></td>
+<td>Classification of the read relative to the site, as a sum of the values in A.2</td>
+</tr>
+<tr>
+<td><code>XA</code></td>
+<td>Allele the read shows at the site: <code>R</code> + base (reference), <code>M</code> + base (mismatch), <code>D</code> + length (deletion), <code>I</code> + inserted bases (insertion), <code>.</code> (site not covered). Mates carry the value of their partner.</td>
+</tr>
+<tr>
+<td><code>XR</code></td>
+<td>Pair orientation, for example <code>F1R2</code></td>
+</tr>
+<tr>
+<td><code>XI</code></td>
+<td>Net length of indels at the site (negative for deletions)</td>
+</tr>
+<tr>
+<td><code>XD</code></td>
+<td>Longest deletion at the site</td>
+</tr>
+<tr>
+<td><code>XN</code></td>
+<td>Longest insertion at the site</td>
+</tr>
+<tr>
+<td><code>XS</code></td>
+<td>Summary of indels at the site, for example <code>D7</code></td>
+</tr>
+<tr>
+<td><code>SL</code>, <code>SR</code></td>
+<td>Soft-clipped bases at the left and right end of the read</td>
+</tr>
+<tr>
+<td><code>NM</code>, <code>MD</code></td>
+<td>Edit distance and mismatch string, recalculated against the reference</td>
+</tr>
+<tr>
+<td><code>BQ</code></td>
+<td>Base alignment quality offsets added by samtools; the BAQ limits are worked out from it</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="a2-xo-values">A.2 <code>XO</code> values</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Value</th>
+<th>Hex</th>
+<th>Name in the filter panel</th>
+<th>Set when</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>0x1</td>
+<td>overlap</td>
+<td>The read crosses the site and both mates of its pair cross it</td>
+</tr>
+<tr>
+<td>2</td>
+<td>0x2</td>
+<td>mates</td>
+<td>The read was fetched as the mate of a crossing read</td>
+</tr>
+<tr>
+<td>4</td>
+<td>0x4</td>
+<td>split mates</td>
+<td>The read was fetched as the other part of a split read</td>
+</tr>
+<tr>
+<td>8</td>
+<td>0x8</td>
+<td>split reads</td>
+<td>The read has an <code>SA</code> tag</td>
+</tr>
+<tr>
+<td>16</td>
+<td>0x10</td>
+<td>proper</td>
+<td>Paired, flagged as a proper pair, and F1R2 or R1F2</td>
+</tr>
+<tr>
+<td>32</td>
+<td>0x20</td>
+<td>improper</td>
+<td>Paired, and not "proper" as defined above</td>
+</tr>
+<tr>
+<td>4096</td>
+<td>0x1000</td>
+<td>F1R2</td>
+<td>Read 1 forward, read 2 reverse</td>
+</tr>
+<tr>
+<td>8192</td>
+<td>0x2000</td>
+<td>R1F2</td>
+<td>Read 1 reverse, read 2 forward</td>
+</tr>
+<tr>
+<td>16384</td>
+<td>0x4000</td>
+<td>F1F2</td>
+<td>Both forward</td>
+</tr>
+<tr>
+<td>32768</td>
+<td>0x8000</td>
+<td>R1R2</td>
+<td>Both reverse</td>
+</tr>
+</tbody>
+</table></div>
+<p>Examples: <code>4112</code> = 4096 + 16, an F1R2 proper pair. <code>8208</code> = 8192 + 16, an R1F2 proper pair. <code>16416</code> = 16384 + 32, a pair with both mates forward.</p>
+<h3 id="a3-the-address-of-a-view">A.3 The address of a view</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Part</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>v=chrom:pos</code></td>
+<td>The variant shown</td>
+</tr>
+<tr>
+<td><code>on=…</code></td>
+<td>Flags and read types that are set, comma-separated: <code>filter-…</code> for require, <code>retain-…</code> for exclude, for example <code>retain-duplicates</code></td>
+</tr>
+<tr>
+<td><code>min-mapq=20</code> and similar</td>
+<td>Numeric limits and the Strand setting, by the name of the box</td>
+</tr>
+<tr>
+<td><code>xa=MA</code></td>
+<td>Allele filter, using the <code>XA</code> codes in A.1</td>
+</tr>
+<tr>
+<td><code>s=2000</code></td>
+<td>Subsample size of a deep site</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="a4-columns-of-the-review-table-tsv">A.4 Columns of the review table (.tsv)</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>chrom</code>, <code>pos</code>, <code>ref</code>, <code>alt</code></td>
+<td>The variant</td>
+</tr>
+<tr>
+<td><code>vcf_info</code></td>
+<td>The VCF <code>INFO</code> summary shown in the table</td>
+</tr>
+<tr>
+<td><code>af</code>, <code>af_source</code></td>
+<td>Allele fraction, and <code>vcf</code> or <code>reads</code> for where it came from</td>
+</tr>
+<tr>
+<td><code>status</code>, <code>note</code></td>
+<td>Your review</td>
+</tr>
+<tr>
+<td><code>observed_alleles</code></td>
+<td>For sites opened in this session: each allele with its count, share and strand split, for example <code>SNP:C=26(31.33%,15+/11-)</code></td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="a5-commands">A.5 Commands</h3>
+<pre><code>build_variant_browser -b BAM -r FASTA [-v VCF] [-g GENOME_NAME] [-o OUT_DIR] [-t THREADS]
+start_server [--data-dir DIR] [--port PORT] [--host HOST] [--debug]
+docker run --rm -p 127.0.0.1:8000:8000 [-v FOLDER:/data] allelescope [serve | demo | build ARGS]
+</code></pre>
+<hr />
+<h2 id="appendix-b-the-datasets-used-in-the-figures">Appendix B: The datasets used in the figures</h2>
+<p>All figures use small synthetic datasets, not real sequencing data, so nothing in them has biological meaning.</p>
+<h3 id="b1-the-demo-dataset">B.1 The demo dataset</h3>
+<p>Generated by <code>demo/simulate_demo_data.py</code>, which is supplied with this manual and is also in the repository's <code>demo/</code> folder together with the finished files. The reference is random sequence and the reads are simulated 150 bp pairs.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Sequence</th>
+<th>Length</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>demo_seg1</code></td>
+<td>6,000 bp</td>
+<td>All the variants below</td>
+</tr>
+<tr>
+<td><code>demo_seg2</code></td>
+<td>3,000 bp</td>
+<td>No variants; receives the other half of the split reads</td>
+</tr>
+<tr>
+<td><code>demo_seg3</code></td>
+<td>1,500 bp</td>
+<td>No variants</td>
+</tr>
+</tbody>
+</table></div>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Position on <code>demo_seg1</code></th>
+<th>In the VCF</th>
+<th>What was simulated</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1200</td>
+<td>yes</td>
+<td>SNP in nearly all reads</td>
+</tr>
+<tr>
+<td>2450</td>
+<td>yes</td>
+<td>SNP in about 30% of read pairs</td>
+</tr>
+<tr>
+<td>2800</td>
+<td>no</td>
+<td>Two low-frequency alternative bases</td>
+</tr>
+<tr>
+<td>3300</td>
+<td>yes</td>
+<td>7-base deletion in about 40% of read pairs</td>
+</tr>
+<tr>
+<td>3700</td>
+<td>no</td>
+<td>Breakpoint: split reads continuing at <code>demo_seg2:801</code></td>
+</tr>
+<tr>
+<td>4100</td>
+<td>yes</td>
+<td>3-base insertion in about 25% of read pairs</td>
+</tr>
+<tr>
+<td>5000</td>
+<td>yes</td>
+<td>SNP carried only by reverse-strand reads</td>
+</tr>
+<tr>
+<td>5150–5800</td>
+<td>no</td>
+<td>A few pairs with both mates on the forward strand</td>
+</tr>
+</tbody>
+</table></div>
+<p>About 8% of read pairs are duplicated, and about 5% of reads have a soft-clipped end.</p>
+<p>To recreate it (needs <code>pysam</code>, <code>samtools</code>, <code>bgzip</code> and <code>tabix</code>):</p>
+<pre><code class="language-bash">python demo/simulate_demo_data.py demo_input
+samtools calmd -b demo_input/demo_reads.bam demo_input/demo_ref.fa &gt; demo_input/demo_reads.md.bam
+bgzip demo_input/demo_calls.vcf
+
+build_variant_browser -b demo_input/demo_reads.md.bam -r demo_input/demo_ref.fa \
+    -v demo_input/demo_calls.vcf.gz -o Browsers/demo
+start_server --data-dir Browsers --port 8000
+</code></pre>
+<p>Then open <code>http://localhost:8000/demo/</code>.</p>
+<h3 id="b2-datasets-for-section-8-and-section-10">B.2 Datasets for section 8 and section 10</h3>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Dataset</th>
+<th>Used in</th>
+<th>Contents</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8-segment genome</td>
+<td>Figures 18–20, 23, 24</td>
+<td>Eight random sequences of 0.9–2.4 kb named like influenza segments (<code>seg1_PB2</code> … <code>seg8_NS</code>), about 30x paired reads, one or two SNPs per segment, <code>AF</code> in the VCF</td>
+</tr>
+<tr>
+<td>41-contig assembly</td>
+<td>Figures 21, 22</td>
+<td>Forty contigs <code>contig_01</code> … <code>contig_40</code> and one with a 63-character assembler-style name, one SNP each</td>
+</tr>
+<tr>
+<td>Deep viral-like sample</td>
+<td>Figures 29, 30</td>
+<td>Two 30 kb sequences, 1.4 million reads, about 198,000 reads crossing one SNP at <code>chr1:11501</code></td>
+</tr>
+</tbody>
+</table></div>
+</main></body></html>

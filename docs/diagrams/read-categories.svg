@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="470" viewBox="0 0 1000 470" font-family="Helvetica, Arial, sans-serif" font-size="14">
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#495057"/></marker>
+  </defs>
+  <rect width="1000" height="470" fill="#ffffff"/>
+  <!-- reference -->
+  <line x1="30" y1="50" x2="690" y2="50" stroke="#343a40" stroke-width="3"/>
+  <text x="30" y="36" fill="#343a40">reference (around the site)</text>
+  <text x="690" y="45" font-size="20" fill="#868e96">//</text>
+  <line x1="730" y1="50" x2="970" y2="50" stroke="#343a40" stroke-width="3"/>
+  <text x="730" y="36" fill="#343a40">elsewhere in the genome</text>
+  <!-- site -->
+  <line x1="360" y1="20" x2="360" y2="440" stroke="#c2255c" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="368" y="24" fill="#c2255c" font-weight="bold">site of interest</text>
+
+  <!-- A: both mates cross -->
+  <text x="30" y="92" font-weight="bold" fill="#212529">A · both mates cross the site</text>
+  <polygon points="250,104 450,104 462,115 450,126 250,126" fill="#f4a9a8" stroke="#c0605e"/>
+  <polygon points="300,134 288,145 300,156 500,156 500,134" fill="#a9a9f4" stroke="#6060c0"/>
+  <text x="520" y="120" fill="#212529">both reads: <tspan font-weight="bold">overlap</tspan></text>
+  <text x="520" y="150" fill="#868e96" font-size="12">XO bit 0x1</text>
+
+  <!-- B: one mate crosses -->
+  <text x="30" y="200" font-weight="bold" fill="#212529">B · one mate crosses, the other does not</text>
+  <polygon points="190,212 390,212 402,223 390,234 190,234" fill="#f4a9a8" stroke="#c0605e"/>
+  <line x1="402" y1="223" x2="470" y2="223" stroke="#868e96" stroke-dasharray="3 3"/>
+  <polygon points="482,212 470,223 482,234 670,234 670,212" fill="#d0d0f8" stroke="#6060c0" stroke-dasharray="5 3"/>
+  <text x="190" y="254" fill="#212529" stroke="#fff" stroke-width="5" paint-order="stroke">crossing read (no extra bit)</text>
+  <text x="482" y="254" fill="#212529">its mate: <tspan font-weight="bold">mates</tspan> <tspan fill="#868e96" font-size="12">XO bit 0x2</tspan></text>
+
+  <!-- C: split read -->
+  <text x="30" y="300" font-weight="bold" fill="#212529">C · split (chimeric) read</text>
+  <polygon points="200,312 360,312 360,334 200,334" fill="#f4a9a8" stroke="#c0605e"/>
+  <rect x="360" y="312" width="70" height="22" fill="#ffffff" stroke="#c0605e" stroke-dasharray="4 3"/>
+  <text x="366" y="328" font-size="11" fill="#868e96">clipped</text>
+  <path d="M430,323 C560,290 650,300 760,318" fill="none" stroke="#495057" stroke-dasharray="4 3" marker-end="url(#ah)"/>
+  <polygon points="765,312 835,312 847,323 835,334 765,334" fill="#f4d9a8" stroke="#c09a5e"/>
+  <text x="200" y="354" fill="#212529" stroke="#fff" stroke-width="5" paint-order="stroke">part at the site: <tspan font-weight="bold">split reads</tspan> <tspan fill="#868e96" font-size="12" stroke="none">XO bit 0x8</tspan></text>
+  <text x="700" y="354" fill="#212529">other part: <tspan font-weight="bold">split mates</tspan></text>
+  <text x="700" y="372" fill="#868e96" font-size="12">XO bits 0x4 + 0x8</text>
+
+  <!-- legend -->
+  <rect x="30" y="400" width="940" height="50" fill="#f8f9fa" stroke="#dee2e6"/>
+  <polygon points="45,416 95,416 103,425 95,434 45,434" fill="#f4a9a8" stroke="#c0605e"/>
+  <text x="112" y="430" fill="#212529">forward-strand read</text>
+  <polygon points="275,416 267,425 275,434 325,434 325,416" fill="#a9a9f4" stroke="#6060c0"/>
+  <text x="334" y="430" fill="#212529">reverse-strand read</text>
+  <text x="500" y="430" fill="#495057">All of these are kept in the per-site read set and can be filtered.</text>
+</svg>
