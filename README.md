@@ -1,6 +1,6 @@
 # Allelescope User Manual
 
-*Covers Allelescope 0.1.02 as on the `main` branch of `22noon/consensus` (pull requests #1 to #8). Revised 18 November 2026. Also available as a [web page](https://22noon.github.io/consensus/) and a [PDF](docs/allelescope-user-manual.pdf).*
+*Covers Allelescope 0.1.02 as on the `main` branch of `22noon/consensus` (pull requests #1 to #8) and the read-evidence warnings. Revised 18 November 2026. Also available as a [web page](https://22noon.github.io/consensus/) and a [PDF](docs/allelescope-user-manual.pdf).*
 
 Allelescope is a web-based viewer for checking variant calls against the reads behind them. You pick a site, and Allelescope shows the reads that cross it, together with their mates and split-read partners, in an embedded IGV view. You can narrow those reads down by flag, pairing, strand, edit distance, soft clipping or observed allele, pick out individual reads to keep, hide or download, and record a verdict for each variant as you go.
 
@@ -254,7 +254,7 @@ The left pane is where you choose sites, record your review and set filters. The
 | # | Part | What it is for |
 |---|---|---|
 | 1 | Header gear | Cached reads and what your browser has saved ([section 13](#13-housekeeping-caches-saved-lists-and-presets)) |
-| 2 | **Jump to position** | Add positions that are not in the VCF ([section 9.5](#95-add-a-position-that-is-not-in-the-vcf)) |
+| 2 | **Jump to position** | Add positions that are not in the VCF ([section 9.6](#96-add-a-position-that-is-not-in-the-vcf)) |
 | 3 | Variants gear | How the list of sequences is shown, empty sequences, saved variant lists |
 | 4 | Variant toolbar | Search, status filter, review download, keyboard shortcuts ([section 7](#7-reviewing-a-list-of-variants)) |
 | 5 | Sequence tabs | One tab per reference sequence, with its number of variants ([section 8](#8-genomes-with-many-sequences)) |
@@ -339,11 +339,12 @@ The tags are explained in [Appendix A](#appendix-a-reference-tables).
 |---|---|
 | Status icon | Your review status: an empty circle (not reviewed), Confirmed, Doubtful or Artefact ([section 7](#7-reviewing-a-list-of-variants)) |
 | **Pos**, **Ref**, **Alt** | The VCF record. Long alleles are shortened; point at one to see it in full |
-| **AF** | The allele fraction from the VCF. If the VCF has none, the fraction seen in the reads appears *in italics* once you have opened the site |
+| **AF** | The allele fraction from the VCF. If the VCF has none, the fraction seen in the reads appears *in italics* once you have opened the site. Point at a VCF value to see the fraction in the reads |
+| Flag | Read-evidence warnings once the site has been opened: a green tick, or ⚠ and their number ([section 9.3](#93-read-evidence)) |
 | **Note** | Your note, or the VCF `INFO` summary (for example `DP=87`) until you write one. Point at the cell to see the VCF `INFO` |
 | × | Removes the row. It appears when you point at the row |
 
-- Click **Pos**, **AF** or the status icon in the header to sort the table; click again to reverse the order.
+- Click **Pos**, **AF**, the flag or the status icon in the header to sort the table; click again to reverse the order.
 - Removing a row asks no question; a message in the bottom-right corner offers **Undo**. Your browser remembers the removal ([section 13.2](#132-what-your-browser-remembers)).
 
 ---
@@ -392,7 +393,7 @@ Going through a list is fastest with the keyboard. Press **?** (or the keyboard 
 | **C**, **D**, **X** | Mark Confirmed, Doubtful, Artefact; press again to clear |
 | **U** | Clear the status |
 | **E** | Edit the note |
-| **1** – **9** | Show only the reads with that allele of the allele panel ([section 9.4](#94-filter-by-allele)) |
+| **1** – **9** | Show only the reads with that allele of the allele panel ([section 9.5](#95-filter-by-allele)) |
 | **0** | Show reads with any allele |
 | **/** | Search the variant list |
 | **?** | Show or hide the list of shortcuts |
@@ -529,17 +530,67 @@ The second line of each allele shows whether the allele is supported on both str
 - **`MQ 60`**: mean mapping quality of the reads.
 - **⚠ strand**: the allele is mostly on one strand while the other reads at the site are not. Allelescope marks it when Fisher's exact test comparing the allele's strand split with that of the other reads gives p < 0.01 and at most 15 % of the allele's reads are on one strand. This is a common sign of an artefact. Point at the mark for the p-value.
 
-### 9.3 Insertions and deletions
+### 9.3 Read evidence
+
+Below the allele list, **Read evidence** compares the reads behind the main alleles at the site (up to four). Each row is a property of the reads; each column is an allele. It opens by itself when something looks wrong.
+
+![Read evidence for an allele from a related sequence](docs/images/evidence-panel.png)
+
+*Figure 26. A synthetic site where the ALT reads carry four other mismatches each and all have alternative hits elsewhere: the ALT allele is marked ⚠ multi-mapped and ⚠ mismatches, and the values behind the warnings are red.*
+
+| Row | Meaning |
+|---|---|
+| **Near read end** | Share of reads in which the site is less than 10 bases from either end of the aligned part of the read; the median distance in brackets |
+| **Other edits** | Mean edit distance (`NM` tag) of the reads, not counting the allele itself. Empty when the BAM has no `NM` tags |
+| **Multi-mapped** | Reads with mapping quality 0, secondary alignments, or alternative hits (bwa's `XA` tag, or an `XS` score as good as `AS`) |
+| **Clipped near site** | Reads with a soft clip of at least 5 bases whose edge is within 10 bases of the site |
+| **Split reads** | Supplementary alignments and reads with an `SA` tag |
+| **Insert size** | Median insert size of read pairs whose mates map to the same sequence |
+| **F1R2 pairs** | Share of read pairs in F1R2 orientation (read 1 forward or read 2 reverse); the rest are F2R1 |
+| **Duplicates** | Reads marked as duplicates. Only meaningful if the BAM keeps duplicates and marks them |
+
+Like the allele counts, these use one read per read pair and every read at the site, even when a deep site is subsampled for display ([section 10](#10-very-deep-sites)).
+
+**Warnings.** Each allele other than the reference is compared with a baseline: the reference allele if it has at least 5 reads, otherwise the most common other allele. A warning appears after the allele's strand and quality line, and as red values in the table. Point at a warning to read what it means.
+
+| Warning | Shown when the allele… | Often means |
+|---|---|---|
+| ⚠ strand | is on one strand for at least 85 % of its reads, unlike the baseline (see [9.2](#92-strand-and-quality)) | Sequencing or alignment artefact |
+| ⚠ orientation | is in one pair orientation (F1R2 or F2R1) for at least 85 % of its read pairs, unlike the baseline | DNA damage during library preparation, such as oxidation (G>T) or deamination (C>T) |
+| ⚠ read end | is within 10 bases of a read end in at least 40 % of its reads, and at least twice as often as the baseline | Alignment errors at read ends, adapters, primer sequence |
+| ⚠ mismatches | has at least 1.5 more other edits per read than the baseline | Reads from a related sequence (paralogue, another strain) or a contaminant |
+| ⚠ multi-mapped | has at least 30 % ambiguous reads, at least twice the baseline | A repeat, or a sequence present more than once |
+| ⚠ clipped | has at least 30 % of reads clipped near the site, at least twice the baseline | Misalignment, or a larger rearrangement nearby |
+| ⚠ split reads | has at least 30 % split reads, at least twice the baseline | A rearrangement or structural variant |
+| ⚠ duplicates | has at least 60 % duplicates, at least 1.5 times the baseline | Support from few original molecules (PCR jackpot) |
+| ⚠ insert size | has a median insert size at least 50 bp and 25 % away from the baseline's | Reads from another template, or an indel nearby |
+| ⚠ low BQ | has a mean base quality at least 10 below the baseline and at most 25 | Sequencing errors |
+
+Every warning needs at least 5 reads with the allele. Warnings that compare counts (strand, orientation, read end, multi-mapped, clipped, split reads, duplicates) also need Fisher's exact test to give p < 0.01. Together with the minimum effect, this keeps very deep sites from being flagged for tiny differences.
+
+The variant table gets one more warning, **⚠ AF ≠ VCF**, when the VCF's `AF` and the share of reads carrying the ALT allele differ by at least 15 percentage points. The caller may have dropped low-quality or duplicate reads, or realigned them, so it is a reason to look rather than proof of an error.
+
+The warnings are hints, not verdicts: a real variant near the end of an amplicon can be flagged *read end*, and a sample made only of duplicates flags nothing. Use them to decide which variants to look at closely.
+
+**In the variant table.** The flag column shows, for each site opened in this session, a green tick when there are no warnings or ⚠ and the number of warnings. Point at it for the list, or click its header to sort the most-flagged variants to the bottom (click again for the top).
+
+![Variant table with read-evidence warnings](docs/images/evidence-table.png)
+
+*Figure 27. The variant table after opening each site of the synthetic test set: the clean variant at 500 has a tick, the others have one to three warnings.*
+
+The warnings are also in both downloads ([section 7.5](#75-download-the-review)): the `read_flags` column of the review table, and `INFO/READ_FLAGS` in the VCF, for example `READ_FLAGS=ambiguous,mismatches`.
+
+### 9.4 Insertions and deletions
 
 A VCF gives the base *before* an insertion or deletion as its position. At that base every read still shows the reference, so it says nothing about the indel. For indel records Allelescope therefore compares the reads one base further on: the first deleted base, or the base that follows the insertion point. The panel says which position it used (Figure 8), and the view stays centred on the VCF position.
 
-### 9.4 Filter by allele
+### 9.5 Filter by allele
 
 The quickest way: **click an allele** in the panel (anywhere except its tick box), or press its number on the keyboard. The track then shows only read pairs carrying that allele. Click it again, or press **0**, to show all reads.
 
 ![Allele filter applied to a deletion](docs/images/allele-filter-deletion.png)
 
-*Figure 26. The deletion at 3300 after clicking `DEL 7`: every read crossing the site carries the deletion.*
+*Figure 28. The deletion at 3300 after clicking `DEL 7`: every read crossing the site carries the deletion.*
 
 To keep several alleles at once:
 
@@ -557,7 +608,7 @@ To clear it yourself, do any one of these:
 - use **Reset filters** or **Clear All**;
 - click **Filter** with no allele ticked.
 
-### 9.5 Add a position that is not in the VCF
+### 9.6 Add a position that is not in the VCF
 
 1. Select the tab for the right reference sequence.
 2. Type one or more 1-based positions in **Jump to position**, separated by spaces, commas or semicolons.
@@ -567,13 +618,13 @@ Each position is added to the table as a yellow row, the view moves to it, and t
 
 ![A manually added position with its allele panel](docs/images/manual-position-alleles.png)
 
-*Figure 27. Position 2800 added by hand. The allele panel shows that most read pairs carry the reference base, with two low-frequency alternatives.*
+*Figure 29. Position 2800 added by hand. The allele panel shows that most read pairs carry the reference base, with two low-frequency alternatives.*
 
 The allele filter works the same way at these positions:
 
 ![Allele filter applied at a position added by hand](docs/images/allele-filter-applied.png)
 
-*Figure 28. Only the read pairs carrying the two alternative bases at 2800, chosen with the tick boxes and Filter.*
+*Figure 30. Only the read pairs carrying the two alternative bases at 2800, chosen with the tick boxes and Filter.*
 
 **Clear** removes all manual rows from the current tab.
 
@@ -591,7 +642,7 @@ At very high depth, for example a viral sample at 100,000x or more, showing ever
 
 ![The subsampling question](docs/images/deep-site-prompt.png)
 
-*Figure 29. A site crossed by 195,351 read pairs.*
+*Figure 31. A site crossed by 195,351 read pairs.*
 
 - **Subsample** shows the number of read pairs in the box. 2,000 is suggested; type another number if you like. The pairs are chosen at random, but the choice is fixed: a read always comes with its mate and split segments, and the same reads are shown every time the site is opened.
 - **Use all reads** shows every read pair. At this depth that takes noticeably longer to prepare and to draw.
@@ -602,7 +653,7 @@ Tick **Do the same for other deep sites in this session** to stop being asked un
 
 ![A subsampled site](docs/images/deep-site-subsampled.png)
 
-*Figure 30. The site subsampled to 2,000 read pairs. The counts below the notice, including the strand split, come from all 195,351 pairs.*
+*Figure 32. The site subsampled to 2,000 read pairs. The counts below the notice, including the strand split, come from all 195,351 pairs.*
 
 - **Show all reads** switches the site to the full read set. A deep site shown in full has a **Subsample to 2,000** button instead.
 - Your browser remembers the choice for each site of each instance, and the address records it ([section 7.6](#76-sharing-a-view)).
@@ -621,9 +672,9 @@ Every filter must be satisfied for a read to be shown:
 
 ![Order in which filters are applied](docs/images/diagram-filter-order.png)
 
-*Figure 31. How the read set for a site is narrowed down.*
+*Figure 33. How the read set for a site is narrowed down.*
 
-A change takes effect immediately: the track reloads with the new read set. Filters stay on as you move between sites. Two things are tied to one site and are reset when you select another: the allele filter ([section 9.4](#94-filter-by-allele)) and **Show only these** / **Hide these** for selected reads ([section 12.2](#122-use-the-selection)).
+A change takes effect immediately: the track reloads with the new read set. Filters stay on as you move between sites. Two things are tied to one site and are reset when you select another: the allele filter ([section 9.5](#95-filter-by-allele)) and **Show only these** / **Hide these** for selected reads ([section 12.2](#122-use-the-selection)).
 
 Filters return to their defaults when the page is reloaded, so save combinations you use often as presets ([section 11.7](#117-reset-download-and-presets)), or keep the address of the view ([section 7.6](#76-sharing-a-view)).
 
@@ -633,7 +684,7 @@ Open a section by clicking its title. Only one is open at a time.
 
 ![The three filter sections](docs/images/filter-sections.png)
 
-*Figure 32. The three sections of the Filters card, each shown open.*
+*Figure 34. The three sections of the Filters card, each shown open.*
 
 ### 11.3 Strand
 
@@ -641,7 +692,7 @@ The **Strand** selector in the view options limits the reads to one strand. **Pl
 
 ![The strand selector at a strand-biased site](docs/images/strand-comparison.png)
 
-*Figure 33. The same site with each Strand setting. The alternative base (green A in the reads) is carried only by reverse-strand reads, which is a typical sign of an artefact. With only those reads shown it is frequent enough for the coverage bar to colour the site. The allele panel shows the same thing as numbers (Figure 25).*
+*Figure 35. The same site with each Strand setting. The alternative base (green A in the reads) is carried only by reverse-strand reads, which is a typical sign of an artefact. With only those reads shown it is frequent enough for the coverage bar to colour the site. The allele panel shows the same thing as numbers (Figure 25).*
 
 ### 11.4 Numeric limits
 
@@ -672,7 +723,7 @@ Point at a property's name to see what it means.
 
 ![Duplicates and mates excluded](docs/images/filters-flags-set.png)
 
-*Figure 34. Duplicates and mates set to exclude; everything else is left at any.*
+*Figure 36. Duplicates and mates set to exclude; everything else is left at any.*
 
 **SAM flags** come from the BAM:
 
@@ -705,7 +756,7 @@ The filters that are switched on are listed at the top of the Filters card, and 
 
 ![Filters applied](docs/images/filters-active.png)
 
-*Figure 35. Duplicates and mates excluded and a minimum mapping quality of 20, leaving non-duplicate reads that cross the site.*
+*Figure 37. Duplicates and mates excluded and a minimum mapping quality of 20, leaving non-duplicate reads that cross the site.*
 
 Each badge states the condition that is applied:
 
@@ -719,7 +770,7 @@ Open the gear on the Filters card:
 
 ![The Filters gear menu](docs/images/filters-gear-menu.png)
 
-*Figure 36. The Filters gear menu.*
+*Figure 38. The Filters gear menu.*
 
 - **Reset filters** returns every filter to its default and clears the allele filter.
 - **Download settings (.json)** saves the current filter settings as a file.
@@ -738,7 +789,7 @@ Hold **Shift** and click a read in the alignment view. The read gets a green out
 
 ![Reads selected in the alignment view](docs/images/read-selection.png)
 
-*Figure 37. Two reads selected. Their names are listed in the bar above the alignment view, with the actions for them.*
+*Figure 39. Two reads selected. Their names are listed in the bar above the alignment view, with the actions for them.*
 
 **[✕]** next to a name removes that read from the selection. **Clear List** empties the selection and restores the full read set; a message offers **Undo**.
 
@@ -752,11 +803,11 @@ Hold **Shift** and click a read in the alignment view. The read gets a green out
 
 ![Show only these](docs/images/read-selection-show-only.png)
 
-*Figure 38. After Show only these: only the selected read pairs remain.*
+*Figure 40. After Show only these: only the selected read pairs remain.*
 
 ![Hide these](docs/images/read-selection-hide.png)
 
-*Figure 39. After Hide these: the selected read pairs are gone and everything else is shown.*
+*Figure 41. After Hide these: the selected read pairs are gone and everything else is shown.*
 
 Selection works by read name, so a read and its mate always go together. **Show only these** and **Hide these** act on the selection as it stands when you click. If you change the selection afterwards, click the button again.
 
@@ -774,7 +825,7 @@ The **Clear Highlights** button does nothing in this version. Use **Clear List**
 
 ![The header gear menu](docs/images/header-gear-menu.png)
 
-*Figure 40. The header gear menu. Each item says what it affects.*
+*Figure 42. The header gear menu. Each item says what it affects.*
 
 | Item | What it does |
 |---|---|
@@ -846,20 +897,20 @@ The examples use the demo dataset ([Appendix B](#appendix-b-the-datasets-used-in
 
 1. Click the variant at `demo_seg1:5000`.
 2. Look at the allele panel: the ALT allele A reads `0+ / 13−` and is marked **⚠ strand** (Figure 25).
-3. To see it in the reads, set **Strand** to **Plus (+)**, then to **Minus (-)**: the green A appears only with **Minus (-)** (Figure 33).
+3. To see it in the reads, set **Strand** to **Plus (+)**, then to **Minus (-)**: the green A appears only with **Minus (-)** (Figure 35).
 4. Set **Strand** back to **Both** and press **X** to mark the variant as an artefact; press **E** to note why.
 
 ### 15.2 Does the support survive without duplicates?
 
 1. Click a variant.
-2. Open **Flags and read types** and set **Duplicates** and **mates** to **exclude** (Figure 34).
-3. The track now holds only non-duplicate reads that cross the site, and the list of filters in use shows `exclude duplicates` and `exclude mates` (Figure 35). Compare the allele balance in the coverage bar with what you saw before.
+2. Open **Flags and read types** and set **Duplicates** and **mates** to **exclude** (Figure 36).
+3. The track now holds only non-duplicate reads that cross the site, and the list of filters in use shows `exclude duplicates` and `exclude mates` (Figure 37). Compare the allele balance in the coverage bar with what you saw before.
 4. Click **Clear All**.
 
 ### 15.3 Which reads carry a deletion?
 
 1. Click the deletion at `demo_seg1:3300`.
-2. In the allele panel, click `DEL 7`, the row marked `ALT` (Figure 26), or press its number.
+2. In the allele panel, click `DEL 7`, the row marked `ALT` (Figure 28), or press its number.
 3. Shift-click any reads you want to keep a record of and click **Export**.
 4. Select the next variant. The allele filter is cleared for you.
 
@@ -870,13 +921,13 @@ The examples use the demo dataset ([Appendix B](#appendix-b-the-datasets-used-in
 
 ![Split reads at a breakpoint](docs/images/split-reads-site.png)
 
-*Figure 41. Only split reads shown. They all end at the breakpoint.*
+*Figure 43. Only split reads shown. They all end at the breakpoint.*
 
 3. The other parts of these reads are in the same track but on another sequence. Click a read: the details box lists its **Supplementary Alignments**, which give the other location. Type that region into the IGV position box, here `demo_seg2:700-1100`:
 
 ![The other half of the split reads](docs/images/split-reads-partner.png)
 
-*Figure 42. The partner segments of the same reads on `demo_seg2`.*
+*Figure 44. The partner segments of the same reads on `demo_seg2`.*
 
 4. Set **split reads** back to **any** when you are done.
 
@@ -888,7 +939,7 @@ The examples use the demo dataset ([Appendix B](#appendix-b-the-datasets-used-in
 
 ![Pairs with both mates on the forward strand](docs/images/orientation-f1f2.png)
 
-*Figure 43. Pairs in F1F2 orientation.*
+*Figure 45. Pairs in F1F2 orientation.*
 
 ### 15.6 Review a whole list
 
@@ -974,6 +1025,7 @@ Examples: `4112` = 4096 + 16, an F1R2 proper pair. `8208` = 8192 + 16, an R1F2 p
 | `af`, `af_source` | Allele fraction, and `vcf` or `reads` for where it came from |
 | `status`, `note` | Your review |
 | `observed_alleles` | For sites opened in this session: each allele with its count, share and strand split, for example `SNP:C=26(31.33%,15+/11-)` |
+| `read_flags` | For sites opened in this session: the read-evidence warnings, comma-separated, for example `ambiguous,mismatches` ([section 9.3](#93-read-evidence)) |
 
 ### A.5 Commands
 
@@ -1026,10 +1078,11 @@ start_server --data-dir Browsers --port 8000
 
 Then open `http://localhost:8000/demo/`.
 
-### B.2 Datasets for section 8 and section 10
+### B.2 Datasets for sections 8, 9.3 and 10
 
 | Dataset | Used in | Contents |
 |---|---|---|
 | 8-segment genome | Figures 18–20, 23, 24 | Eight random sequences of 0.9–2.4 kb named like influenza segments (`seg1_PB2` … `seg8_NS`), about 30x paired reads, one or two SNPs per segment, `AF` in the VCF |
 | 41-contig assembly | Figures 21, 22 | Forty contigs `contig_01` … `contig_40` and one with a 63-character assembler-style name, one SNP each |
-| Deep viral-like sample | Figures 29, 30 | Two 30 kb sequences, 1.4 million reads, about 198,000 reads crossing one SNP at `chr1:11501` |
+| Deep viral-like sample | Figures 31, 32 | Two 30 kb sequences, 1.4 million reads, about 198,000 reads crossing one SNP at `chr1:11501` |
+| Read-evidence test set | Figures 26, 27 | One 6 kb sequence with seven SNPs at about 60x: one clean, and one each with ALT reads ending at the site, carrying extra mismatches and alternative hits, all in F1R2 pairs, all duplicates, clipped with long inserts, and one with `AF` 0.5 in the VCF but 10 % in the reads. Made by `demo/simulate_artefacts.py`; build it with `--bam-processing skip` so its duplicate marks are kept |

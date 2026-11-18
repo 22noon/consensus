@@ -1,4 +1,4 @@
-from .extract_mates import extract_mates, _write_indel_stats
+from .extract_mates import extract_mates, _write_indel_stats, _write_evidence
 from pathlib import Path
 import hashlib
 import json
@@ -11,7 +11,7 @@ import pysam
 #   2: XO "proper" covers both F1R2 and R1F2 proper pairs
 #   3: XA reference/mismatch decided against the FASTA rather than MD tags;
 #      BQ (BAQ) only on reads that cross the site
-PROCESSING_VERSION = "4"
+PROCESSING_VERSION = "5"
 _VERSION_FILE = ".allelescope_version"
 _checked_dirs = set()
 _check_lock = threading.Lock()
@@ -77,11 +77,13 @@ def ensure_current_bam_dir(serverpath) -> Path:
     The per-site BAMs are a cache: they are rebuilt on demand from
     alignment.markdup.bam. If the directory was filled by an older version
     (no marker, or a different one) its contents are deleted so every site is
-    re-extracted with the current tags. Checked once per directory per process.
+    re-extracted with the current tags. Checked once per directory per process,
+    and again if the directory has been deleted since.
     """
     bam_dir = Path(serverpath) / "bam"
     with _check_lock:
-        if bam_dir in _checked_dirs:
+        # Checked already, unless the folder has been deleted since (cache cleared).
+        if bam_dir in _checked_dirs and bam_dir.is_dir():
             return bam_dir
         bam_dir.mkdir(parents=True, exist_ok=True)
         marker = bam_dir / _VERSION_FILE
@@ -166,6 +168,7 @@ def process_variant(
         allele_stats = allele_stats,
     )
     _write_indel_stats(allele_counts, str(out_bam), allele_stats)
+    _write_evidence(allele_stats, str(out_bam))
     sample_info["sample"] = sample
     site_info_path(base, Chrom, Pos, sample).write_text(json.dumps(sample_info), encoding="utf-8")
     pysam.index(str(out_bam))

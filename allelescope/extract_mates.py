@@ -317,6 +317,185 @@ def _base_quality_at(read, target_pos):
     return None
 
 
+# ---- Read evidence per allele ---------------------------------------------
+# Distances in bp. A base this close to either end of the aligned part of a
+# read counts as "near the end"; a soft clip of at least CLIP_MIN_BP whose
+# edge is this close to the site counts as "clipped near the site".
+NEAR_END_BP = 10
+CLIP_NEAR_BP = 10
+CLIP_MIN_BP = 5
+
+
+def _site_query_pos(read, target_pos):
+    """
+    (query index, base quality) of the read at reference position target_pos
+    (0-based). Inside a deletion the index is that of the first base after it
+    and the quality is None. (None, None) when the read does not reach there.
+    """
+    quals = read.query_qualities
+    qpos, rpos = 0, read.reference_start
+    for op, length in read.cigartuples or ():
+        if op in (0, 7, 8):
+            if rpos <= target_pos < rpos + length:
+                q = qpos + target_pos - rpos
+                return q, (quals[q] if quals is not None else None)
+            qpos += length
+            rpos += length
+        elif op in (1, 4):
+            qpos += length
+        elif op in (2, 3):
+            if rpos <= target_pos < rpos + length:
+                return qpos, None
+            rpos += length
+    return None, None
+
+
+def _allele_edit_length(allele):
+    """How much the allele itself adds to the read's NM (edit distance)."""
+    if not allele:
+        return 0
+    kind = allele[0]
+    if kind == "M":
+        return 1
+    if kind == "D":
+        try:
+            return int(allele[1:])
+        except ValueError:
+            return 0
+    if kind == "I":
+        return len(allele) - 1
+    return 0
+
+
+def _read_evidence(read, target_pos, allele):
+    """
+    What one read says about how trustworthy its call at target_pos is.
+    Must be called before the read's tags are rewritten (XA in particular,
+    which bwa uses for alternative hits and this module reuses for alleles).
+
+    Returns a tuple:
+      (is_reverse, mapq, base_quality, end_distance, other_edits,
+       ambiguous, chimeric, clipped_near, insert_size, f1r2, duplicate)
+    other_edits is the NM tag minus the allele's own edits (None without NM);
+    insert_size is None unless both mates map to the same sequence;
+    f1r2 is None for unpaired reads.
+    """
+    q, bq = _site_query_pos(read, target_pos)
+    end_distance = None
+    if q is not None:
+        qas, qae = read.query_alignment_start, read.query_alignment_end
+        end_distance = max(0, min(q - qas, qae - 1 - q))
+
+    other_edits = None
+    if read.has_tag("NM"):
+        other_edits = max(0, int(read.get_tag("NM")) - _allele_edit_length(allele))
+
+    # Mapped elsewhere about as well: bwa lists alternative hits in XA, and
+    # reports the best other score in XS (an integer, unlike this module's XS).
+    ambiguous = read.mapping_quality == 0 or read.is_secondary or read.has_tag("XA")
+    if not ambiguous and read.has_tag("AS") and read.has_tag("XS"):
+        xs = read.get_tag("XS")
+        if isinstance(xs, int) and xs >= read.get_tag("AS"):
+            ambiguous = True
+
+    chimeric = read.is_supplementary or read.has_tag("SA")
+
+    clipped_near = False
+    cig = read.cigartuples or ()
+
+    def soft_clip(ops):
+        n = 0
+        for op, length in ops:          # clips sit at the ends: H then S
+            if op == 4:
+                n += length
+            elif op != 5:
+                break
+        return n
+
+    if soft_clip(cig) >= CLIP_MIN_BP and target_pos - read.reference_start <= CLIP_NEAR_BP:
+        clipped_near = True
+    if soft_clip(reversed(cig)) >= CLIP_MIN_BP and (read.reference_end - 1) - target_pos <= CLIP_NEAR_BP:
+        clipped_near = True
+
+    insert_size = None
+    f1r2 = None
+    if read.is_paired:
+        f1r2 = read.is_read1 != read.is_reverse
+        if (not read.mate_is_unmapped and read.template_length
+                and read.reference_id == read.next_reference_id):
+            insert_size = abs(read.template_length)
+
+    return (read.is_reverse, read.mapping_quality, bq, end_distance, other_edits,
+            ambiguous, chimeric, clipped_near, insert_size, f1r2, read.is_duplicate)
+
+
+def _new_allele_stats():
+    return {"fwd": 0, "rev": 0, "bq_sum": 0, "bq_n": 0, "mq_sum": 0,
+            "end_dist": [], "nm_sum": 0, "nm_n": 0, "mq0": 0, "ambiguous": 0,
+            "chimeric": 0, "clipped": 0, "isize": [], "f1r2": 0, "f2r1": 0, "dup": 0}
+
+
+def _add_evidence(st, ev):
+    (rev, mq, bq, end_distance, other_edits, ambiguous, chimeric,
+     clipped_near, insert_size, f1r2, dup) = ev
+    st["rev" if rev else "fwd"] += 1
+    st["mq_sum"] += mq
+    if mq == 0:
+        st["mq0"] += 1
+    if bq is not None:
+        st["bq_sum"] += bq
+        st["bq_n"] += 1
+    if end_distance is not None:
+        st["end_dist"].append(end_distance)
+    if other_edits is not None:
+        st["nm_sum"] += other_edits
+        st["nm_n"] += 1
+    st["ambiguous"] += ambiguous
+    st["chimeric"] += chimeric
+    st["clipped"] += clipped_near
+    if insert_size is not None:
+        st["isize"].append(insert_size)
+    if f1r2 is not None:
+        st["f1r2" if f1r2 else "f2r1"] += 1
+    st["dup"] += dup
+
+
+def _median(values):
+    if not values:
+        return None
+    s = sorted(values)
+    m = len(s) // 2
+    return s[m] if len(s) % 2 else (s[m - 1] + s[m]) / 2
+
+
+def allele_evidence_summary(allele_stats):
+    """
+    Per-allele summary written to <bam>.evidence.json and sent to the browser.
+    Counts are numbers of reads (one per fragment, as for the allele counts).
+    """
+    out = {}
+    for allele, st in allele_stats.items():
+        n = st["fwd"] + st["rev"]
+        dist = st["end_dist"]
+        out[allele] = {
+            "n": n,
+            "end_median": _median(dist),
+            "near_end": sum(1 for d in dist if d < NEAR_END_BP),
+            "end_n": len(dist),
+            "nm_mean": round(st["nm_sum"] / st["nm_n"], 2) if st["nm_n"] else None,
+            "mq0": st["mq0"],
+            "ambiguous": st["ambiguous"],
+            "chimeric": st["chimeric"],
+            "clipped": st["clipped"],
+            "isize_median": _median(st["isize"]),
+            "isize_n": len(st["isize"]),
+            "f1r2": st["f1r2"],
+            "f2r1": st["f2r1"],
+            "dup": st["dup"],
+        }
+    return out
+
+
 def _name_rank(qname: str) -> bytes:
     """Fixed pseudo-random sort key for a read name (same on every run)."""
     return hashlib.blake2b(qname.encode("utf-8", "surrogateescape"), digest_size=8,
@@ -392,9 +571,10 @@ def extract_mates(
                    counts still use every read. None keeps everything.
         sample_info: optional dict, filled with "pairs_total" and
                    "pairs_kept".
-        allele_stats: optional dict, filled per allele with
-                   {"fwd", "rev", "bq_sum", "bq_n", "mq_sum"} over the same
-                   reads as the allele counts (one read per fragment).
+        allele_stats: optional dict, filled per allele with strand counts,
+                   base and mapping quality, and the read evidence summarised
+                   by allele_evidence_summary(), over the same reads as the
+                   allele counts (one read per fragment).
         ref_fasta: indexed reference FASTA. Used to look up the reference
                    base at the site once; without it each read's MD tag
                    is parsed instead.
@@ -438,7 +618,7 @@ def extract_mates(
     written_records = set()               # (query_name, reference_start) already in overlap_bam
     XA_dict          = {}                 # query_name -> chosen allele call, propagated onto mates
     pending          = defaultdict(list)  # query_name -> [(chrom, pos, kind), ...]
-    covering         = defaultdict(list)  # query_name -> [(is_supplementary, reference_start, allele), ...]
+    covering         = defaultdict(list)  # query_name -> [(is_supplementary, reference_start, allele, evidence), ...]
 
     # ---- Pass 1a: which mates (R1/R2) have a PRIMARY alignment crossing the region ----
     print(f"Scanning region {chrom}:{start}-{end} for overlapping alignments >(split or not)<...")
@@ -483,9 +663,10 @@ def extract_mates(
         if keep is not None and read.query_name not in keep:
             # Dropped from the display: only its allele call is needed.
             if read.reference_start <= target_pos < read.reference_end:
+                allele = get_allele_at_base(read, target_pos, site_ref_base)
                 covering[read.query_name].append(
-                    (read.is_supplementary, read.reference_start,
-                     get_allele_at_base(read, target_pos, site_ref_base), read)
+                    (read.is_supplementary, read.reference_start, allele,
+                     _read_evidence(read, target_pos, allele) if allele_stats is not None else None)
                 )
             continue
 
@@ -503,7 +684,8 @@ def extract_mates(
         # where both split segments independently cover target_pos).
         if read.reference_start <= target_pos < read.reference_end:
             covering[read.query_name].append(
-                (read.is_supplementary, read.reference_start, allele, read)
+                (read.is_supplementary, read.reference_start, allele,
+                 _read_evidence(read, target_pos, allele) if allele_stats is not None else None)
             )
 
         read.set_tag("XA", allele,      value_type="Z")
@@ -532,17 +714,13 @@ def extract_mates(
     # Preference order: non-supplementary (primary) alignment first; among
     # remaining ties, leftmost reference_start. Independent of fetch order.
     for qname, candidates in covering.items():
-        _, _, allele, chosen = min(candidates, key=lambda c: (c[0], c[1]))
+        _, _, allele, evidence = min(candidates, key=lambda c: (c[0], c[1]))
         allele_counts[allele] += 1
         XA_dict[qname] = allele
         if allele_stats is not None:
-            st = allele_stats.setdefault(allele, {"fwd": 0, "rev": 0, "bq_sum": 0, "bq_n": 0, "mq_sum": 0})
-            st["rev" if chosen.is_reverse else "fwd"] += 1
-            st["mq_sum"] += chosen.mapping_quality
-            bq = _base_quality_at(chosen, target_pos)
-            if bq is not None:
-                st["bq_sum"] += bq
-                st["bq_n"] += 1
+            if allele not in allele_stats:
+                allele_stats[allele] = _new_allele_stats()
+            _add_evidence(allele_stats[allele], evidence)
 
     # ---- Build the set of "other alignments" that still need fetching ----
     # Anything whose target (chrom, pos) matches an already-written record
@@ -639,6 +817,13 @@ def _write_indel_stats(allele_counts: defaultdict, out_bam: str, allele_stats: d
                 line += f"\t{st['fwd']}\t{st['rev']}\t{bq}\t{mq}"
             f.write(line + "\n")
 
+
+
+def _write_evidence(allele_stats: dict, out_bam: str) -> None:
+    """Write allele_evidence_summary() to <out_bam>.evidence.json."""
+    import json
+    with open(f"{out_bam}.evidence.json", "w", encoding="utf-8") as f:
+        json.dump(allele_evidence_summary(allele_stats), f)
 
 if __name__ == "__main__":
     if len(sys.argv) != 7:

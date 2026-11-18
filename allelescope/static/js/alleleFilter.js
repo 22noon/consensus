@@ -111,6 +111,11 @@ function alleleStatsHtml(a, alleles) {
     const parts = [`<span title="Reads on the forward / reverse strand">${a.fwd}+ / ${a.rev}−</span>`];
     if (a.bq !== null && a.bq !== undefined) parts.push(`<span title="Mean base quality at the site">BQ ${Math.round(a.bq)}</span>`);
     if (a.mq !== null && a.mq !== undefined) parts.push(`<span title="Mean mapping quality">MQ ${Math.round(a.mq)}</span>`);
+    if (typeof alleleFlagsHtml === "function") {
+        const flags = alleleFlagsHtml(a, alleles);
+        if (flags) parts.push(flags);
+        return `<div class="allele-stats small text-muted">${parts.join(" · ")}</div>`;
+    }
     const bias = strandBias(a, alleles);
     if (bias) {
         const side = bias.fwdFraction >= 0.5 ? "forward" : "reverse";
@@ -306,6 +311,8 @@ function buildAlleleFilterPanel(variant, site, alleles) {
             <div id="allele-hidden-notice"
                  class="text-muted small text-center pt-1" style="display:none;"></div>
         </div>
+        ${typeof evidenceTableHtml === "function"
+            ? `<div class="card-footer bg-white p-2 evidence-footer">${evidenceTableHtml(alleles, expected)}</div>` : ""}
     `;
 
     // Below the variant list, so the table does not move under the pointer

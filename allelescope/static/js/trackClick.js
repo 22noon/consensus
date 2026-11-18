@@ -69,7 +69,7 @@ function findVariantRow(variant) {
     const pane = document.getElementById(variant.chrom);
     if (!pane) return null;
     for (const row of pane.querySelectorAll('tbody tr')) {
-        if (parseInt(row.cells[0].textContent, 10) === variant.pos) return row;
+        if (Number(row.dataset.pos) === variant.pos) return row;
     }
     return null;
 }
