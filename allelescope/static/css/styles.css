@@ -455,3 +455,18 @@ tr.variant-row:hover .row-delete, tr.variant-row.selected .row-delete, .row-dele
 .evidence-table th, .evidence-table td { padding: 2px 8px; text-align: right; white-space: nowrap; vertical-align: top; }
 .evidence-table tbody th { text-align: left; font-weight: 500; color: var(--bs-secondary-color); cursor: help; }
 .evidence-table thead th { font-weight: 600; }
+
+/* ---- Effects and primers (annotation.js) ---- */
+.variant-table .col-effect { display: none; }
+.variant-table.has-effects .col-effect { display: table-cell; max-width: 11rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.effect-chip { display: inline-block; padding: 0 .35rem; border-radius: .25rem; font-size: .75rem; line-height: 1.35;
+               border: 1px solid transparent; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.effect-chip .effect-gene { font-weight: 600; }
+.effect-chip .effect-type { opacity: .8; font-style: italic; }
+.effect-missense   { background: #fff3cd; border-color: #ffe08a; color: #664d03; }
+.effect-synonymous { background: #f1f3f5; border-color: #dee2e6; color: #495057; }
+.effect-severe     { background: #f8d7da; border-color: #f1aeb5; color: #842029; }
+.effect-inframe    { background: #e2d9f3; border-color: #c5b3e6; color: #3d2a6b; }
+.primer-badge { background: #cfe2ff; color: #084298; font-weight: 500; font-size: .65rem; }
+.primer-note { color: #084298; background: #e7f1ff; border-radius: .25rem; padding: .25rem .5rem; }
+.allele-effect { margin-top: 2px; }

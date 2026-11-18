@@ -257,6 +257,26 @@ warnings, or ⚠ and the number of warnings, including **AF ≠ VCF** when the
 VCF's AF and the reads differ by 15 points or more.  The warnings are added to
 the review table (`read_flags`) and the reviewed VCF (`INFO/READ_FLAGS`).
 
+### Gene effects and primers
+
+Build with `-a genes.gff3` (or a GTF) and, for amplicon data, `-p primers.bed`,
+or copy the files into an existing instance as `annotation.gff3` /
+`annotation.gtf` and `primers.bed` and reload the page.  The variant table then
+gets an **Effect** column (`polA S328Y`, `capB M150ins1`, `polA L300fs`, ...,
+and `primer` for variants in a primer site); every allele in the allele panel
+shows its effect; and the search box matches genes, changes and kinds such as
+`missense`.  Multi-part CDSs (spliced genes, ribosomal slippage) and both
+strands are handled.
+
+With a primer scheme, the reads of each allele that have primer sequence at
+the site (they start in a left primer, or end in a right primer, covering it)
+are counted.  **⚠ primer** marks an allele seen mainly in primer sequence; **⚠
+primer-masked** marks one hidden by primer reads that always show the
+primer's base, with its share among the other reads.  At primer sites the
+strand and orientation tests are skipped, since the alleles' reads come from
+different amplicons.  The reviewed VCF gets `INFO/EFFECT` and `INFO/PRIMER`,
+the review table `effect` and `primers` columns.
+
 Click an allele to show only its reads, and click it again to show all reads
 (or press its number, 1 to 9, and 0 to clear).  While a site is being
 prepared for the first time the panel shows *Preparing reads at ...*.

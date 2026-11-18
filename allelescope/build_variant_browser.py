@@ -18,9 +18,11 @@ from typing import Iterable, Optional
 try:  # run as part of the package
     from .bam_state import (PLAN_COPY, PLAN_FULL, PLAN_MARKDUP, PLAN_SORT,
                             existing_index, inspect_bam)
+    from .annotation import ANNOTATION_NAMES, PRIMER_NAMES, Annotation, open_annotation
 except ImportError:  # run as a script
     from bam_state import (PLAN_COPY, PLAN_FULL, PLAN_MARKDUP, PLAN_SORT,
                            existing_index, inspect_bam)
+    from annotation import ANNOTATION_NAMES, PRIMER_NAMES, Annotation, open_annotation
 
 
 class BuildError(RuntimeError):
@@ -314,10 +316,48 @@ def run_viewer_generator(
     success(f"Viewer generated in: {out_dir}")
 
 
+def copy_annotation_files(annotation: Optional[Path], primers: Optional[Path],
+                          ref_dest: Path, out_dir: Path) -> None:
+    """
+    Copy the gene annotation and primer scheme into the instance under the
+    names the server looks for (annotation.gff3 / .gtf, primers.bed), and
+    check that they use the reference's sequence names.
+    """
+    if annotation is None and primers is None:
+        return
+    step("Copying annotation and primers")
+    # Remove copies from an earlier build, so an old file is not used instead.
+    for name in (ANNOTATION_NAMES if annotation else ()) + (PRIMER_NAMES if primers else ()):
+        (out_dir / name).unlink(missing_ok=True)
+    gff_dest = bed_dest = None
+    if annotation is not None:
+        gz = annotation.name.endswith(".gz")
+        stem = annotation.name[:-3] if gz else annotation.name
+        ext = ".gtf" if stem.lower().endswith(".gtf") else ".gff3"
+        gff_dest = out_dir / ("annotation" + ext + (".gz" if gz else ""))
+        shutil.copy2(annotation, gff_dest)
+    if primers is not None:
+        bed_dest = out_dir / "primers.bed"
+        shutil.copy2(primers, bed_dest)
+    try:
+        ann = Annotation(ref_dest, open_annotation(gff_dest) if gff_dest else None, bed_dest)
+        info_ = ann.info()
+    except Exception as exc:
+        raise BuildError(f"Could not read the annotation or primer file: {exc}")
+    for w in info_["warnings"]:
+        warn(w)
+    if gff_dest is not None:
+        success(f"Annotation: {info_['cds']} coding sequence(s) -> {gff_dest.name}")
+    if bed_dest is not None:
+        success(f"Primers: {info_['primers']} primer(s) -> {bed_dest.name}")
+
+
 def build_variant_browser(args: argparse.Namespace) -> None:
     bam = Path(args.bam).expanduser().resolve()
     ref = Path(args.reference).expanduser().resolve()
     variants = Path(args.variants).expanduser().resolve() if args.variants else None
+    annotation = Path(args.annotation).expanduser().resolve() if getattr(args, "annotation", None) else None
+    primers = Path(args.primers).expanduser().resolve() if getattr(args, "primers", None) else None
     out_dir = Path(args.out_dir).expanduser().resolve()
 
     step("Validating inputs")
@@ -325,6 +365,10 @@ def build_variant_browser(args: argparse.Namespace) -> None:
     require_file(ref, "FASTA file")
     if variants is not None:
         require_file(variants, "Variant file")
+    if annotation is not None:
+        require_file(annotation, "Annotation file")
+    if primers is not None:
+        require_file(primers, "Primer BED file")
 
     require_command("samtools")
     if variants is not None:
@@ -341,6 +385,7 @@ def build_variant_browser(args: argparse.Namespace) -> None:
     markdup_bam = process_bam(bam, out_dir, args.threads, args.bam_processing, args.link)
     ref_dest = copy_and_index_reference(ref, out_dir)
     vcf_dest = copy_and_index_vcf(variants, out_dir)
+    copy_annotation_files(annotation, primers, ref_dest, out_dir)
     run_viewer_generator(genome_name, ref_dest, markdup_bam, vcf_dest, out_dir)
 
     print(f"\n{Colours.BOLD}────────────────────────── Summary ──────────────────────────────{Colours.RESET}")
@@ -349,6 +394,10 @@ def build_variant_browser(args: argparse.Namespace) -> None:
     print(f"  BAM           : {markdup_bam.name}")
     print(f"  FASTA         : {ref_dest.name}")
     print(f"  Variants      : {vcf_dest.name if vcf_dest else '(none)'}")
+    if annotation is not None:
+        print(f"  Annotation    : {annotation.name}")
+    if primers is not None:
+        print(f"  Primers       : {primers.name}")
     print(f"{Colours.BOLD}─────────────────────────────────────────────────────────────────{Colours.RESET}\n")
 
 
@@ -369,6 +418,14 @@ def make_parser() -> argparse.ArgumentParser:
              "full: always run collate, fixmate, sort and markdup; "
              "skip: use a coordinate-sorted BAM as it is",
     )
+    parser.add_argument(
+        "-a", "--annotation",
+        help="Gene annotation, GFF3 or GTF (optionally .gz), with CDS features on the "
+             "reference's sequence names: variants then show their effect on the protein")
+    parser.add_argument(
+        "-p", "--primers",
+        help="Amplicon primer scheme, BED (chrom, start, end, name, [pool], [strand]): "
+             "variants and reads in primer sites are marked")
     parser.add_argument(
         "--link", action="store_true",
         help="When the BAM needs no processing, hard-link it into the instance "

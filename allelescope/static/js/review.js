@@ -200,7 +200,8 @@ function applyVariantSearch() {
         const v = row._variant;
         if (!v) return;
         const r = getReview(v);
-        const hay = `${v.pos} ${v.ref} ${v.alt} ${v.info || ""} ${r?.n || ""}`.toLowerCase();
+        const effect = typeof effectSearchText === "function" ? effectSearchText(v) : "";
+        const hay = `${v.pos} ${v.ref} ${v.alt} ${v.info || ""} ${r?.n || ""} ${effect}`.toLowerCase();
         const statusOk = !status || (status === "none" ? !r?.s : r?.s === status);
         row.classList.toggle("variant-row-hidden", !(statusOk && (!text || hay.includes(text))));
     });
@@ -216,6 +217,7 @@ function updateReviewProgress() {
 
 /* Called by buildVariantTabs (tabs.js) after every rebuild. */
 function afterVariantTablesBuilt() {
+    if (typeof loadAnnotation === "function") loadAnnotation();
     ensureReviewToolbar();
     applyVariantSearch();
     updateReviewProgress();
@@ -349,7 +351,7 @@ function _tsvCell(value) {
 
 function exportReviewTSV() {
     const header = ["chrom", "pos", "ref", "alt", "vcf_info", "af", "af_source",
-                    "status", "note", "observed_alleles", "read_flags"];
+                    "status", "note", "observed_alleles", "read_flags", "effect", "primers"];
     const lines = [header.join("\t")];
     (AppState.variants || []).filter(v => v.pos !== 0).forEach(v => {
         const r = getReview(v) || {};
@@ -361,7 +363,8 @@ function exportReviewTSV() {
         }).join("; ");
         lines.push([v.chrom, v.pos, v.ref, v.alt, v.info === "Manual" ? "" : v.info,
                     af.value >= 0 ? af.value.toFixed(4) : "", af.value >= 0 ? (af.observed ? "reads" : "vcf") : "",
-                    r.s || "", r.n || "", observed, _readFlags(v).join(",")].map(_tsvCell).join("\t"));
+                    r.s || "", r.n || "", observed, _readFlags(v).join(","),
+                    ...(typeof effectTsv === "function" ? effectTsv(v) : ["", ""])].map(_tsvCell).join("\t"));
     });
     const name = (AppState.API_BASE || "").split("/").filter(Boolean).pop() || "allelescope";
     downloadText(lines.join("\n") + "\n", `${name}.review.tsv`, "text/tab-separated-values");

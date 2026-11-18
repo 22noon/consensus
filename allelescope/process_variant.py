@@ -11,7 +11,7 @@ import pysam
 #   2: XO "proper" covers both F1R2 and R1F2 proper pairs
 #   3: XA reference/mismatch decided against the FASTA rather than MD tags;
 #      BQ (BAQ) only on reads that cross the site
-PROCESSING_VERSION = "5"
+PROCESSING_VERSION = "6"
 _VERSION_FILE = ".allelescope_version"
 _checked_dirs = set()
 _check_lock = threading.Lock()

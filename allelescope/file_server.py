@@ -20,6 +20,7 @@ from pathlib import Path
 from .process_variant import (process_variant, ensure_current_bam_dir, site_stem, site_sample,
                               read_site_info, PROCESSING_VERSION)
 from .read_filters import filter_reads
+from .annotation import Annotation, instance_files, open_annotation
 import shutil
 
 
@@ -389,6 +390,75 @@ def extract_reads(browser=None, token=None):
         download_name=f"selected_reads_{chrom}_{pos}.bam"
     )
 
+# ---- Gene annotation and primers -----------------------------------------
+_annotations = {}                  # instance folder -> (signature, Annotation or None)
+_annotations_guard = threading.Lock()
+
+
+def instance_annotation(serverpath):
+    """
+    The Annotation of an instance (annotation.gff3 / .gtf and primers.bed in
+    its folder), or None when it has neither. Re-read when a file changes, so
+    files can be added to an instance without rebuilding it.
+    """
+    serverpath = Path(serverpath)
+    fasta, gff, bed = instance_files(serverpath)
+    if fasta is None or (gff is None and bed is None):
+        return None
+    sig = tuple((str(f), f.stat().st_mtime, f.stat().st_size) for f in (fasta, gff, bed) if f)
+    with _annotations_guard:
+        cached = _annotations.get(serverpath)
+        if cached and cached[0] == sig:
+            return cached[1]
+        try:
+            ann = Annotation(fasta, open_annotation(gff) if gff else None, bed)
+        except Exception as exc:                      # a broken file must not break the viewer
+            print(f"Could not read the annotation of {serverpath}: {exc}", flush=True)
+            ann = None
+        _annotations[serverpath] = (sig, ann)
+        return ann
+
+
+def _effect_text(e):
+    """geneA:D2H:missense, as in INFO/EFFECT."""
+    return f"{e['gene']}:{e['change']}:{e['type']}".replace(" ", "_").replace(",", "+").replace(";", "_")
+
+
+@app.route("/api/annotate", methods=["POST"])
+@app.route("/<path:browser>/api/annotate", methods=["POST"])
+def annotate(browser=None):
+    """
+    Coding effects and primers for a list of variants.
+    Body: {"variants": [{"chrom", "pos", "ref", "alt"}, ...]}   (alt may be "A,T")
+    Returns {"info": {...}, "variants": {"chrom:pos": {"effects": [...], "primers": [...]}}}
+    or {"info": null} when the instance has no annotation or primers.
+    """
+    serverpath = DATA_DIR if browser is None else DATA_DIR / browser
+    ann = instance_annotation(serverpath)
+    if ann is None:
+        return jsonify({"info": None, "variants": {}})
+    body = request.get_json(silent=True) or {}
+    out = {}
+    for v in body.get("variants") or []:
+        try:
+            chrom, pos = str(v["chrom"]), int(v["pos"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        ref = str(v.get("ref") or "")
+        effects = []
+        if ann.has_cds(chrom):
+            for alt in str(v.get("alt") or "").split(","):
+                for e in ann.effects(chrom, pos, ref, alt.strip()):
+                    effects.append({**e, "alt": alt.strip()})
+        entry = {"effects": effects, "coding": ann.has_cds(chrom)}
+        # A variant overlaps a primer if any of its reference bases do.
+        names = {p[2] for i in range(max(1, len(ref))) for p in ann.primers_at(chrom, pos + i)}
+        if names:
+            entry["primers"] = sorted(names)
+        out[f"{chrom}:{pos}"] = entry
+    return jsonify({"info": ann.info(), "variants": out})
+
+
 @app.route("/api/extract")
 @app.route("/<path:browser>/api/extract")
 def extract_bam(browser=None):
@@ -440,8 +510,28 @@ def extract_bam(browser=None):
                     allele["ev"] = evidence[xa]
                 mock_alleles.append(allele)
 
-        return jsonify({"success": True, "alleles": mock_alleles,
-                        "sampling": read_site_info(serverpath, Chrom, Pos, Sample)})
+        result = {"success": True, "alleles": mock_alleles,
+                  "sampling": read_site_info(serverpath, Chrom, Pos, Sample)}
+        ann = instance_annotation(serverpath)
+        if ann is not None:
+            pos = int(Pos)
+            result["primers"] = [p[2] for p in ann.primers_at(Chrom, pos)]
+            result["coding"] = ann.has_cds(Chrom)
+            for allele in mock_alleles:
+                if ann.has_cds(Chrom):
+                    allele["effects"] = ann.allele_effects(Chrom, pos, allele["xa"])
+                ev = allele.get("ev")
+                if result["primers"] and ev and "starts" in ev:
+                    ev["primer"] = ann.primer_reads(Chrom, pos, ev["starts"], ev["ends"])
+                if ev:                                  # not needed in the browser
+                    ev.pop("starts", None)
+                    ev.pop("ends", None)
+        else:
+            for allele in mock_alleles:
+                if allele.get("ev"):
+                    allele["ev"].pop("starts", None)
+                    allele["ev"].pop("ends", None)
+        return jsonify(result)
     return jsonify({"success": False}), 500
 
 
@@ -471,6 +561,8 @@ def review_vcf(browser=None):
         INFO/REVIEW       confirmed | doubtful | artefact
         INFO/REVIEW_NOTE  the note, percent-encoded (%3B for ";", %20 for space ...)
         INFO/READ_FLAGS   read-evidence warnings for sites opened in the browser
+        INFO/EFFECT       coding effects, if the instance has an annotation
+        INFO/PRIMER       primers overlapping the variant, if it has a primer scheme
     Body: {"reviews": {"chrom:pos": {"s": status, "n": note}, ...},
            "flags":   {"chrom:pos": ["read-end", "strand", ...], ...}}
     """
@@ -490,11 +582,19 @@ def review_vcf(browser=None):
         if "REVIEW_NOTE" not in header.info:
             header.add_meta("INFO", items=[("ID", "REVIEW_NOTE"), ("Number", "1"), ("Type", "String"),
                                            ("Description", "Allelescope review note (percent-encoded)")])
+        ann = instance_annotation(serverpath)
+        if ann is not None and ann.cds and "EFFECT" not in header.info:
+            header.add_meta("INFO", items=[("ID", "EFFECT"), ("Number", "."), ("Type", "String"),
+                                           ("Description", "Allelescope coding effect per ALT: gene:change:type, "
+                                            "for example S:D614G:missense (from the instance's annotation)")])
+        if ann is not None and ann.primers and "PRIMER" not in header.info:
+            header.add_meta("INFO", items=[("ID", "PRIMER"), ("Number", "."), ("Type", "String"),
+                                           ("Description", "Allelescope: amplicon primers overlapping the variant")])
         if flags and "READ_FLAGS" not in header.info:
             header.add_meta("INFO", items=[("ID", "READ_FLAGS"), ("Number", "."), ("Type", "String"),
                                            ("Description", "Allelescope read-evidence warnings: strand, orientation, "
                                             "read-end, mismatches, ambiguous, clipped, split, insert-size, "
-                                            "duplicates, low-bq, af-mismatch")])
+                                            "duplicates, low-bq, af-mismatch, primer, primer-masked")])
         with tempfile.TemporaryDirectory() as tmp:
             out_path = Path(tmp) / "reviewed.vcf"
             with pysam.VariantFile(str(out_path), "w", header=header) as vout:
@@ -511,6 +611,15 @@ def review_vcf(browser=None):
                           if isinstance(f, str) and re.fullmatch(r"[a-z-]+", f)]
                     if rf:
                         rec.info["READ_FLAGS"] = rf
+                    if ann is not None:
+                        effects = [_effect_text(e) for alt in (rec.alts or ())
+                                   for e in ann.effects(rec.chrom, rec.pos, rec.ref, alt)]
+                        if effects and ann.cds:
+                            rec.info["EFFECT"] = effects
+                        names = sorted({p[2] for i in range(len(rec.ref))
+                                        for p in ann.primers_at(rec.chrom, rec.pos + i)})
+                        if names and ann.primers:
+                            rec.info["PRIMER"] = [re.sub(r"[;=,\s]", "_", n) for n in names]
                     vout.write(rec)
             data = out_path.read_bytes()
 

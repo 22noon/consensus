@@ -375,7 +375,10 @@ def _read_evidence(read, target_pos, allele):
 
     Returns a tuple:
       (is_reverse, mapq, base_quality, end_distance, other_edits,
-       ambiguous, chimeric, clipped_near, insert_size, f1r2, duplicate)
+       ambiguous, chimeric, clipped_near, insert_size, f1r2, duplicate,
+       aligned_start, aligned_end)
+    aligned_start and aligned_end are 1-based and inclusive: the first and
+    last reference bases of the aligned part (used to find primer sequence).
     other_edits is the NM tag minus the allele's own edits (None without NM);
     insert_size is None unless both mates map to the same sequence;
     f1r2 is None for unpaired reads.
@@ -426,18 +429,22 @@ def _read_evidence(read, target_pos, allele):
             insert_size = abs(read.template_length)
 
     return (read.is_reverse, read.mapping_quality, bq, end_distance, other_edits,
-            ambiguous, chimeric, clipped_near, insert_size, f1r2, read.is_duplicate)
+            ambiguous, chimeric, clipped_near, insert_size, f1r2, read.is_duplicate,
+            read.reference_start + 1, read.reference_end)
 
 
 def _new_allele_stats():
     return {"fwd": 0, "rev": 0, "bq_sum": 0, "bq_n": 0, "mq_sum": 0,
             "end_dist": [], "nm_sum": 0, "nm_n": 0, "mq0": 0, "ambiguous": 0,
-            "chimeric": 0, "clipped": 0, "isize": [], "f1r2": 0, "f2r1": 0, "dup": 0}
+            "chimeric": 0, "clipped": 0, "isize": [], "f1r2": 0, "f2r1": 0, "dup": 0,
+            "starts": defaultdict(int), "ends": defaultdict(int)}
 
 
 def _add_evidence(st, ev):
     (rev, mq, bq, end_distance, other_edits, ambiguous, chimeric,
-     clipped_near, insert_size, f1r2, dup) = ev
+     clipped_near, insert_size, f1r2, dup, aligned_start, aligned_end) = ev
+    st["starts"][aligned_start] += 1
+    st["ends"][aligned_end] += 1
     st["rev" if rev else "fwd"] += 1
     st["mq_sum"] += mq
     if mq == 0:
@@ -492,6 +499,11 @@ def allele_evidence_summary(allele_stats):
             "f1r2": st["f1r2"],
             "f2r1": st["f2r1"],
             "dup": st["dup"],
+            # Where the reads' aligned parts start and end: {position: reads}.
+            # With a primer scheme these show which reads have primer
+            # sequence at the site (annotation.Annotation.primer_reads).
+            "starts": {str(k): v for k, v in sorted(st["starts"].items())},
+            "ends": {str(k): v for k, v in sorted(st["ends"].items())},
         }
     return out
 
@@ -720,6 +732,13 @@ def extract_mates(
         if allele_stats is not None:
             if allele not in allele_stats:
                 allele_stats[allele] = _new_allele_stats()
+            # When both mates cross the site, the site is only "near a read
+            # end" if it is near the end of each of them: use the read where
+            # it lies furthest from an end.
+            dists = [c[3][3] for c in candidates
+                     if c[2] == allele and c[3] is not None and c[3][3] is not None]
+            if len(dists) > 1 and max(dists) != evidence[3]:
+                evidence = evidence[:3] + (max(dists),) + evidence[4:]
             _add_evidence(allele_stats[allele], evidence)
 
     # ---- Build the set of "other alignments" that still need fetching ----
