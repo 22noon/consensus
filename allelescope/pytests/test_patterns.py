@@ -179,6 +179,7 @@ def test_differences_of_a_read():
 def test_server(site, monkeypatch):
     from allelescope import file_server
     monkeypatch.setattr(file_server, "DATA_DIR", site["dir"].parent)
+    monkeypatch.setattr(file_server, "CACHE_ROOT", site["dir"].parent / "cache")
     client = file_server.app.test_client()
     inst = site["dir"].name
     d = client.get(f"/{inst}/api/patterns?Chrom=c&Pos={SITE}&Ref=ref.fa").get_json()
