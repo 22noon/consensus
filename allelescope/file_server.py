@@ -21,6 +21,7 @@ from .process_variant import (process_variant, ensure_current_bam_dir, site_stem
                               read_site_info, PROCESSING_VERSION)
 from .read_filters import filter_reads
 from .annotation import Annotation, instance_files, open_annotation
+from .patterns import Settings as PatternSettings, cached_analysis, keep_names
 import shutil
 
 
@@ -151,7 +152,34 @@ def get_filtered_reads_bam(serverpath: Path, filename: str, **params):
         processed_bam(serverpath, params.get("Chrom"), params.get("Pos"), params.get("Ref"),
                       sample=params.get("Sample"))
 
-    return filter_reads(bam_file, params)
+    header, reads = filter_reads(bam_file, params)
+    # Read patterns: keep whole pairs by the pattern they belong to. Patterns
+    # are always worked out on every read at the site, so their frequencies
+    # do not change with the other filters.
+    mode = (params.get("Pat") or "").strip()
+    if mode:
+        result = site_patterns(serverpath, params)
+        keep = keep_names(result, mode) if result else None
+        if keep is not None:
+            reads = [r for r in reads if r.query_name in keep]
+    return header, reads
+
+
+def site_patterns(serverpath, params):
+    """Read patterns of a site (patterns.py), from the full per-site read set."""
+    chrom, pos = params.get("Chrom"), params.get("Pos")
+    if not chrom or not pos:
+        return None
+    stem = site_stem(chrom, pos, params.get("Sample"))
+    site_bam = ensure_current_bam_dir(serverpath) / f"{stem}.calmd.bam"
+    if not site_bam.exists():
+        processed_bam(serverpath, chrom, pos, params.get("Ref"), sample=params.get("Sample"))
+    fasta, _, _ = instance_files(serverpath)
+    if fasta is None or not site_bam.exists():
+        return None
+    with _cache_lock(f"{site_bam}.patterns"):
+        return cached_analysis(site_bam, fasta, chrom, int(pos),
+                               PatternSettings.from_params(params), instance_annotation(serverpath))
 
 def build_filtered_bam(serverpath, cache_dir, filename, cache_key, params):
     bam_path = cache_dir / f"{cache_key}.bam"
@@ -457,6 +485,38 @@ def annotate(browser=None):
             entry["primers"] = sorted(names)
         out[f"{chrom}:{pos}"] = entry
     return jsonify({"info": ann.info(), "variants": out})
+
+
+@app.route("/api/patterns")
+@app.route("/<path:browser>/api/patterns")
+def patterns_api(browser=None):
+    """
+    Read patterns at a site.
+    Query: Chrom, Pos, [Sample], [Ref], and the pattern settings
+      PatN, PatPct, PatBQ (informative positions), PatMin, PatMinN (common
+      patterns), PatSites ("pos:code|code,..." for the variant list).
+    """
+    serverpath = DATA_DIR if browser is None else DATA_DIR / browser
+    params = request.args.to_dict()
+    try:
+        result = site_patterns(serverpath, params)
+    except Exception as exc:
+        print(f"Read patterns failed: {exc}", flush=True)
+        return jsonify({"success": False, "error": str(exc)}), 500
+    if result is None:
+        return jsonify({"success": False, "error": "No reads at this site"}), 404
+    out = {k: v for k, v in result.items() if k != "assignment"}
+    ann = instance_annotation(serverpath)
+    if ann is not None and ann.has_cds(params.get("Chrom")):
+        effects = {}
+        for p in result["positions"]:
+            for code in p["codes"]:
+                e = ann.allele_effects(params["Chrom"], p["pos"], code)
+                if e:
+                    effects[f"{p['pos']}:{code}"] = [f"{x['gene']} {x['change']}" for x in e]
+        out["effects"] = effects
+    out["success"] = True
+    return jsonify(out)
 
 
 @app.route("/api/extract")

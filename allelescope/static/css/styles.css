@@ -470,3 +470,27 @@ tr.variant-row:hover .row-delete, tr.variant-row.selected .row-delete, .row-dele
 .primer-badge { background: #cfe2ff; color: #084298; font-weight: 500; font-size: .65rem; }
 .primer-note { color: #084298; background: #e7f1ff; border-radius: .25rem; padding: .25rem .5rem; }
 .allele-effect { margin-top: 2px; }
+
+/* ---- Read patterns (patterns.js) ---- */
+.patterns-footer details > summary { cursor: pointer; }
+.pattern-table { width: auto; }
+.pattern-table th, .pattern-table td { padding: 1px 5px; text-align: center; white-space: nowrap; vertical-align: middle; }
+.pattern-table thead th { font-weight: 600; font-size: .7rem; line-height: 1.1; }
+.pattern-table .pat-refbase { font-weight: 400; color: var(--bs-secondary-color); }
+.pattern-table .pat-site { background: #e7f1ff; }
+.pattern-table tbody th { text-align: left; }
+.pattern-table td.pat-warn { text-align: left; }
+.pattern-table td.pat-warn span { cursor: help; white-space: nowrap; }
+.pattern-table tr.pat-row { cursor: pointer; }
+.pattern-table tr.pat-row:hover > * { --bs-table-bg-state: #f1f3f5; background-color: #f1f3f5; }
+.pattern-table tr.pat-active > *, .pattern-table tr.pat-active:hover > * { --bs-table-bg-state: #cfe2ff; background-color: #cfe2ff; }
+.pattern-table tr.pat-dim { opacity: .45; }
+.pattern-table tr.pat-unin td, .pattern-table tr.pat-other-row td { text-align: left; }
+.pat-ref { color: #adb5bd; }
+.pat-alt { font-weight: 700; color: #b02a37; }
+.pat-del, .pat-other { color: #6c757d; }
+.pat-rare { font-size: .6rem; color: #6c757d; margin-left: 2px; vertical-align: super; }
+.pattern-filter-note { color: #084298; background: #e7f1ff; border-radius: .25rem; padding: .15rem .4rem; }
+.pattern-num { width: 5rem; flex: 0 0 auto; }
+.pat-warnings { border-left: 3px solid var(--bs-danger); padding-left: .4rem; }
+.pat-warn-line span { cursor: help; }

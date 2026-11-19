@@ -277,6 +277,23 @@ strand and orientation tests are skipped, since the alleles' reads come from
 different amplicons.  The reviewed VCF gets `INFO/EFFECT` and `INFO/PRIMER`,
 the review table `effect` and `primers` columns.
 
+### Read patterns
+
+Below the allele list, **Read patterns** lists the combinations of
+differences from the reference that the read pairs crossing the site carry:
+mismatches (base quality >= 20), insertions and deletions at positions where
+a difference recurs (>= 3 pairs and >= 2 %), plus the listed variants nearby.
+Each row is a pattern with its number of pairs; warnings mark patterns with
+reads on one strand, differences at read ends, scattered mismatches (noisy),
+a mix of two common patterns (PCR chimera), low mapping quality, duplicates,
+or reads from one amplicon only.  Click a row to show only its reads.
+
+**Show common / rare** (also under Filters > Read patterns, with the
+thresholds) keeps only pairs in common patterns (>= 5 % and >= 5 pairs), a
+noise filter, or only those in rare ones.  Frequencies are always computed on
+all reads at the site.  The setting and a selected pattern are part of the
+view address.
+
 Click an allele to show only its reads, and click it again to show all reads
 (or press its number, 1 to 9, and 0 to clear).  While a site is being
 prepared for the first time the panel shows *Preparing reads at ...*.
