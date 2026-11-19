@@ -467,6 +467,8 @@ function currentViewParams() {
     const site = alleleSite(v);
     const sample = typeof siteSampleParam === "function" ? siteSampleParam(site.chrom, site.pos) : "";
     if (sample) params.set("s", sample);
+    const pick = AppState.patternPick;
+    if (pick && pick.site === siteKey(site)) params.set("pp", `${pick.ids}~${pick.label}`);
     return params;
 }
 
@@ -550,6 +552,12 @@ async function restoreViewFromUrl() {
         row.scrollIntoView({ block: "nearest" });
         await selectVariantRow(row, v);
 
+        const pp = params.get("pp");
+        AppState.patternPick = null;
+        if (pp) {
+            const [ids, label] = pp.split("~");
+            AppState.patternPick = { site: siteKey(site), ids, label: label || ids };
+        }
         const xa = (params.get("xa") || "").split(",").filter(Boolean);
         if (xa.length) {
             AppState.activeXAFilter = new Set(xa);

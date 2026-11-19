@@ -492,6 +492,10 @@ function Create_Filter_String(Chrom, pos, filters) {
     // Which version of the site: a subsample, or (no parameter) every read.
     const sample = typeof siteSampleParam === "function" ? siteSampleParam(Chrom, pos) : "";
     if (sample) params.set("Sample", sample);
+    // Read patterns (patterns.js): only when a pattern filter is on.
+    if (typeof patternFilterParams === "function") {
+        Object.entries(patternFilterParams(Chrom, pos)).forEach(([k, v]) => params.set(k, v));
+    }
 
     return `?${params.toString()}`;
 }
@@ -593,6 +597,7 @@ function extraActiveFilters() {
             remove: clearAlleleFilter
         });
     }
+    if (typeof patternActiveFilters === "function") extra.push(...patternActiveFilters());
     return extra;
 }
 

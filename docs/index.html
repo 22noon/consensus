@@ -37,7 +37,7 @@ p img { max-width:100%; }
 </style></head>
 <body><main>
 <h1 id="allelescope-user-manual">Allelescope User Manual</h1>
-<p><em>Covers Allelescope 0.1.02 as on the <code>main</code> branch of <code>22noon/consensus</code> (pull requests #1 to #10), with gene effects and primer sites. Revised 18 November 2026. Also available as a <a href="https://22noon.github.io/consensus/">web page</a> and a <a href="allelescope-user-manual.pdf">PDF</a>.</em></p>
+<p><em>Covers Allelescope 0.1.02 as on the <code>main</code> branch of <code>22noon/consensus</code> (pull requests #1 to #10), with gene effects, primer sites and read patterns. Revised 18 November 2026. Also available as a <a href="https://22noon.github.io/consensus/">web page</a> and a <a href="allelescope-user-manual.pdf">PDF</a>.</em></p>
 <p>Allelescope is a web-based viewer for checking variant calls against the reads behind them. You pick a site, and Allelescope shows the reads that cross it, together with their mates and split-read partners, in an embedded IGV view. You can narrow those reads down by flag, pairing, strand, edit distance, soft clipping or observed allele, pick out individual reads to keep, hide or download, and record a verdict for each variant as you go.</p>
 <p>This manual has two audiences:</p>
 <ul>
@@ -343,7 +343,7 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <tr>
 <td>2</td>
 <td><strong>Jump to position</strong></td>
-<td>Add positions that are not in the VCF (<a href="#97-add-a-position-that-is-not-in-the-vcf">section 9.7</a>)</td>
+<td>Add positions that are not in the VCF (<a href="#98-add-a-position-that-is-not-in-the-vcf">section 9.8</a>)</td>
 </tr>
 <tr>
 <td>3</td>
@@ -545,7 +545,7 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 </tr>
 <tr>
 <td><strong>1</strong> – <strong>9</strong></td>
-<td>Show only the reads with that allele of the allele panel (<a href="#96-filter-by-allele">section 9.6</a>)</td>
+<td>Show only the reads with that allele of the allele panel (<a href="#97-filter-by-allele">section 9.7</a>)</td>
 </tr>
 <tr>
 <td><strong>0</strong></td>
@@ -869,11 +869,141 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 </table></div>
 <p>At a primer site the reads of different alleles often come from different amplicons, one ending in its primer and the next crossing it. They then differ in strand and pair orientation by design, so when at least 20 % of the allele's or the baseline's reads have primer sequence there, the strand and orientation warnings are left out.</p>
 <p><strong>In the downloads</strong>, the review table has <code>effect</code> and <code>primers</code> columns, and the VCF gets <code>INFO/EFFECT</code> (for example <code>EFFECT=polA:S328Y:missense</code>, one entry per ALT and gene) and <code>INFO/PRIMER</code>. Unlike the read warnings, these are filled in for every variant, opened or not.</p>
-<h3 id="95-insertions-and-deletions">9.5 Insertions and deletions</h3>
+<h3 id="95-read-patterns">9.5 Read patterns</h3>
+<p>The allele panel shows what the reads have at the selected site. <strong>Read patterns</strong>, below it, shows what else the same read pairs have nearby, and which combinations occur. It does not try to call haplotypes. It lists the combinations that are in the reads, how often, and with what read evidence, so that real linked variants can be told from artefacts.</p>
+<figure><img class="shot" alt="Read patterns at a site" src="images/patterns-panel.png" /><figcaption>Figure 31. A synthetic site (<code>virus:1000</code>) where the ALT <code>G</code> is carried by two real lineages (patterns 2 and 3), an artefact (4), a contaminant (5) and PCR chimeras of the two lineages (6). The allele counts alone show only "G in 44 % of the reads".</figcaption></figure>
+<p><strong>How it works.</strong> For every read pair crossing the site, Allelescope lists its differences from the reference within reach of the pair: mismatches with base quality 20 or more, insertions and deletions. It then keeps the positions where a difference recurs (in at least 3 pairs and 2 % of the pairs covering the position), plus every variant of the variant list near the site (marked ★), and the site itself. Each pair's state at those positions is its pattern. Rare one-off differences, mostly sequencing errors, are left out of the patterns but counted as <em>other differences</em> per pair.</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>In the table</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Columns</td>
+<td>Positions where a difference recurs, with the reference base. The selected site is shaded. Point at a column for the counts and, with an annotation, the effect of each difference</td>
+</tr>
+<tr>
+<td>A base, <code>del2</code>, <code>+AT</code></td>
+<td>The pair has this mismatch, deletion or insertion there</td>
+</tr>
+<tr>
+<td><code>·</code></td>
+<td>Same as the reference</td>
+</tr>
+<tr>
+<td>blank</td>
+<td>The pair does not reach the position (or its mates disagree there, or the base quality is low)</td>
+</tr>
+<tr>
+<td><code>x</code></td>
+<td>Another, rarer difference</td>
+</tr>
+<tr>
+<td><code>#</code></td>
+<td>Patterns by size; <sup>r</sup> marks a rare one</td>
+</tr>
+<tr>
+<td><em>pairs too short to tell the patterns apart</em></td>
+<td>Pairs that reach only positions where several patterns agree. They are counted, not assigned</td>
+</tr>
+</tbody>
+</table></div>
+<p>A pair that does not reach every position joins the one pattern it agrees with. Pairs whose reads carry four or more other differences each are kept apart as <strong>noisy</strong> patterns, because scattered mismatches are typical of a contaminant, a related sequence or damaged DNA.</p>
+<p><strong>Warnings.</strong> Each pattern with differences is compared with all the other pairs at the site:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Warning</th>
+<th>Shown when the pattern…</th>
+<th>Often means</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>⚠ strand</td>
+<td>has at least 85 % of the reads showing its differences on one strand, unlike the others (Fisher p &lt; 0.01)</td>
+<td>Sequencing or alignment artefact</td>
+</tr>
+<tr>
+<td>⚠ read end</td>
+<td>has its differences within 10 bp of a read end in at least 40 % of those reads, twice as often as the others (Fisher p &lt; 0.01)</td>
+<td>Alignment errors at read ends, adapters</td>
+</tr>
+<tr>
+<td>⚠ noisy</td>
+<td>is made of pairs with four or more other differences per read</td>
+<td>Contaminant, related sequence, damaged DNA</td>
+</tr>
+<tr>
+<td>⚠ mixed</td>
+<td>is rare, and matches one common pattern on the left and another on the right</td>
+<td>PCR chimera (or a real recombinant)</td>
+</tr>
+<tr>
+<td>⚠ low MAPQ</td>
+<td>has a mean mapping quality at most 40 and at least 15 below the other pairs</td>
+<td>Reads from a repeat or another sequence</td>
+</tr>
+<tr>
+<td>⚠ duplicates</td>
+<td>has at least 60 % duplicate pairs</td>
+<td>Few original molecules</td>
+</tr>
+<tr>
+<td>⚠ one amplicon</td>
+<td>comes entirely from one amplicon while the other pairs come from several (needs a primer scheme, <a href="#94-gene-effects-and-primers">section 9.4</a>)</td>
+<td>Error early in that amplicon's PCR, or a primer artefact</td>
+</tr>
+</tbody>
+</table></div>
+<p>In Figure 31, pattern 4 is the artefact: all its reads are on the reverse strand with the differences at the read end. Pattern 5 is the contaminant: 5.7 other differences per read, mapping quality 25. Pattern 6 combines pattern 2's left side with pattern 3's right side.</p>
+<p><strong>Common and rare patterns.</strong> A pattern is <em>common</em> when at least 5 % of the pairs carry it, and at least 5 pairs. <strong>Show</strong> above the table filters the reads in IGV:</p>
+<ul>
+<li><strong>all</strong>: every pair.</li>
+<li><strong>common</strong>: only pairs in common patterns. Rare combinations, mostly errors, artefacts and chimeras, are hidden. This is a noise filter at the level of whole pairs.</li>
+<li><strong>rare</strong>: only pairs in rare patterns, to look at what the <em>common</em> view hides.</li>
+</ul>
+<figure><img class="shot" alt="Only common patterns shown" src="images/patterns-common.png" /><figcaption>Figure 32. Showing common patterns only: the 21 pairs in rare patterns (the contaminant, five of the chimeras and two stray pairs) are hidden in IGV; the panel says how many, and greys out their rows.</figcaption></figure>
+<p>A rare pattern is not necessarily an artefact: a real minority variant below 5 % is rare too. Patterns that contain a variant of your list are always shown as columns, so you can see whether such a variant only comes in a rare pattern.</p>
+<p><strong>Showing one pattern.</strong> Click a row to show only that pattern's reads in IGV, and click it again to show all. The <strong>…</strong> row stands for all the patterns not listed. The selection is part of the view address (<a href="#a3-the-address-of-a-view">Appendix A.3</a>), so a link shows the same reads.</p>
+<figure><img class="shot" alt="Only the reads of one pattern" src="images/patterns-pick.png" /><figcaption>Figure 33. Pattern 4 selected: IGV shows only its 30 pairs, and the row is highlighted.</figcaption></figure>
+<p>The pattern filter works together with the other filters. For example, tick the ALT allele and choose <strong>rare</strong> to see the rare patterns among the reads carrying the ALT. Pattern frequencies are always worked out on all the reads at the site, so they do not change when you change the other filters.</p>
+<p><strong>Settings.</strong> The <strong>Read patterns</strong> section of the Filters panel holds the same choice of all, common or rare patterns, and the thresholds:</p>
+<div class="tablewrap"><table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Common from (% of pairs), and (pairs)</td>
+<td>5 %, 5</td>
+<td>When a pattern counts as common</td>
+</tr>
+<tr>
+<td>Position counts from (pairs), and (% of pairs there)</td>
+<td>3, 2 %</td>
+<td>When a recurring difference becomes a column</td>
+</tr>
+<tr>
+<td>Base quality from</td>
+<td>20</td>
+<td>Mismatches of lower quality count as unknown</td>
+</tr>
+</tbody>
+</table></div>
+<p>They are saved with the other filters, in presets and in the view address. Patterns are computed once per site and setting, and then cached. At a subsampled deep site they take a fraction of a second; for all reads of a site 200,000 pairs deep, about 8 seconds.</p>
+<h3 id="96-insertions-and-deletions">9.6 Insertions and deletions</h3>
 <p>A VCF gives the base <em>before</em> an insertion or deletion as its position. At that base every read still shows the reference, so it says nothing about the indel. For indel records Allelescope therefore compares the reads one base further on: the first deleted base, or the base that follows the insertion point. The panel says which position it used (Figure 8), and the view stays centred on the VCF position.</p>
-<h3 id="96-filter-by-allele">9.6 Filter by allele</h3>
+<h3 id="97-filter-by-allele">9.7 Filter by allele</h3>
 <p>The quickest way: <strong>click an allele</strong> in the panel (anywhere except its tick box), or press its number on the keyboard. The track then shows only read pairs carrying that allele. Click it again, or press <strong>0</strong>, to show all reads.</p>
-<figure><img class="shot" alt="Allele filter applied to a deletion" src="images/allele-filter-deletion.png" /><figcaption>Figure 31. The deletion at 3300 after clicking <code>DEL 7</code>: every read crossing the site carries the deletion.</figcaption></figure>
+<figure><img class="shot" alt="Allele filter applied to a deletion" src="images/allele-filter-deletion.png" /><figcaption>Figure 34. The deletion at 3300 after clicking <code>DEL 7</code>: every read crossing the site carries the deletion.</figcaption></figure>
 <p>To keep several alleles at once:</p>
 <ol>
 <li>Tick the alleles you want to see. <strong>All</strong> and <strong>None</strong> tick or untick every listed allele.</li>
@@ -888,16 +1018,16 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <li>use <strong>Reset filters</strong> or <strong>Clear All</strong>;</li>
 <li>click <strong>Filter</strong> with no allele ticked.</li>
 </ul>
-<h3 id="97-add-a-position-that-is-not-in-the-vcf">9.7 Add a position that is not in the VCF</h3>
+<h3 id="98-add-a-position-that-is-not-in-the-vcf">9.8 Add a position that is not in the VCF</h3>
 <ol>
 <li>Select the tab for the right reference sequence.</li>
 <li>Type one or more 1-based positions in <strong>Jump to position</strong>, separated by spaces, commas or semicolons.</li>
 <li>Click <strong>Add</strong> or press Enter.</li>
 </ol>
 <p>Each position is added to the table as a yellow row, the view moves to it, and the allele panel shows what the reads carry there:</p>
-<figure><img class="shot" alt="A manually added position with its allele panel" src="images/manual-position-alleles.png" /><figcaption>Figure 32. Position 2800 added by hand. The allele panel shows that most read pairs carry the reference base, with two low-frequency alternatives.</figcaption></figure>
+<figure><img class="shot" alt="A manually added position with its allele panel" src="images/manual-position-alleles.png" /><figcaption>Figure 35. Position 2800 added by hand. The allele panel shows that most read pairs carry the reference base, with two low-frequency alternatives.</figcaption></figure>
 <p>The allele filter works the same way at these positions:</p>
-<figure><img class="shot" alt="Allele filter applied at a position added by hand" src="images/allele-filter-applied.png" /><figcaption>Figure 33. Only the read pairs carrying the two alternative bases at 2800, chosen with the tick boxes and Filter.</figcaption></figure>
+<figure><img class="shot" alt="Allele filter applied at a position added by hand" src="images/allele-filter-applied.png" /><figcaption>Figure 36. Only the read pairs carrying the two alternative bases at 2800, chosen with the tick boxes and Filter.</figcaption></figure>
 <p><strong>Clear</strong> removes all manual rows from the current tab.</p>
 <p>Things to know:</p>
 <ul>
@@ -908,14 +1038,14 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <hr />
 <h2 id="10-very-deep-sites">10. Very deep sites</h2>
 <p>At very high depth, for example a viral sample at 100,000x or more, showing every read is slow to prepare and impossible to read. Before Allelescope prepares a site for the first time, it counts the read pairs that cross it. If there are more than 2,000, it asks what to show:</p>
-<figure><img class="shot" alt="The subsampling question" src="images/deep-site-prompt.png" /><figcaption>Figure 34. A site crossed by 195,351 read pairs.</figcaption></figure>
+<figure><img class="shot" alt="The subsampling question" src="images/deep-site-prompt.png" /><figcaption>Figure 37. A site crossed by 195,351 read pairs.</figcaption></figure>
 <ul>
 <li><strong>Subsample</strong> shows the number of read pairs in the box. 2,000 is suggested; type another number if you like. The pairs are chosen at random, but the choice is fixed: a read always comes with its mate and split segments, and the same reads are shown every time the site is opened.</li>
 <li><strong>Use all reads</strong> shows every read pair. At this depth that takes noticeably longer to prepare and to draw.</li>
 </ul>
 <p>Tick <strong>Do the same for other deep sites in this session</strong> to stop being asked until the page is reloaded.</p>
 <p><strong>The allele counts always use every read</strong>, whichever you choose. The allele panel says when a site is subsampled:</p>
-<figure><img class="shot" alt="A subsampled site" src="images/deep-site-subsampled.png" /><figcaption>Figure 35. The site subsampled to 2,000 read pairs. The counts below the notice, including the strand split, come from all 195,351 pairs.</figcaption></figure>
+<figure><img class="shot" alt="A subsampled site" src="images/deep-site-subsampled.png" /><figcaption>Figure 38. The site subsampled to 2,000 read pairs. The counts below the notice, including the strand split, come from all 195,351 pairs.</figcaption></figure>
 <ul>
 <li><strong>Show all reads</strong> switches the site to the full read set. A deep site shown in full has a <strong>Subsample to 2,000</strong> button instead.</li>
 <li>Your browser remembers the choice for each site of each instance, and the address records it (<a href="#76-sharing-a-view">section 7.6</a>).</li>
@@ -927,15 +1057,15 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <h2 id="11-filtering-reads">11. Filtering reads</h2>
 <h3 id="111-how-filters-combine">11.1 How filters combine</h3>
 <p>Every filter must be satisfied for a read to be shown:</p>
-<figure><img class="diagram tall" alt="Order in which filters are applied" src="images/diagram-filter-order.png" /><figcaption>Figure 36. How the read set for a site is narrowed down.</figcaption></figure>
-<p>A change takes effect immediately: the track reloads with the new read set. Filters stay on as you move between sites. Two things are tied to one site and are reset when you select another: the allele filter (<a href="#96-filter-by-allele">section 9.6</a>) and <strong>Show only these</strong> / <strong>Hide these</strong> for selected reads (<a href="#122-use-the-selection">section 12.2</a>).</p>
+<figure><img class="diagram tall" alt="Order in which filters are applied" src="images/diagram-filter-order.png" /><figcaption>Figure 39. How the read set for a site is narrowed down.</figcaption></figure>
+<p>A change takes effect immediately: the track reloads with the new read set. Filters stay on as you move between sites. Two things are tied to one site and are reset when you select another: the allele filter (<a href="#97-filter-by-allele">section 9.7</a>) and <strong>Show only these</strong> / <strong>Hide these</strong> for selected reads (<a href="#122-use-the-selection">section 12.2</a>).</p>
 <p>Filters return to their defaults when the page is reloaded, so save combinations you use often as presets (<a href="#117-reset-download-and-presets">section 11.7</a>), or keep the address of the view (<a href="#76-sharing-a-view">section 7.6</a>).</p>
 <h3 id="112-the-three-sections">11.2 The three sections</h3>
 <p>Open a section by clicking its title. Only one is open at a time.</p>
-<figure><img class="shot" alt="The three filter sections" src="images/filter-sections.png" /><figcaption>Figure 37. The three sections of the Filters card, each shown open.</figcaption></figure>
+<figure><img class="shot" alt="The three filter sections" src="images/filter-sections.png" /><figcaption>Figure 40. The three sections of the Filters card, each shown open.</figcaption></figure>
 <h3 id="113-strand">11.3 Strand</h3>
 <p>The <strong>Strand</strong> selector in the view options limits the reads to one strand. <strong>Plus (+)</strong> shows forward-strand reads and <strong>Minus (-)</strong> shows reverse-strand reads.</p>
-<figure><img class="shot" alt="The strand selector at a strand-biased site" src="images/strand-comparison.png" /><figcaption>Figure 38. The same site with each Strand setting. The alternative base (green A in the reads) is carried only by reverse-strand reads, which is a typical sign of an artefact. With only those reads shown it is frequent enough for the coverage bar to colour the site. The allele panel shows the same thing as numbers (Figure 25).</figcaption></figure>
+<figure><img class="shot" alt="The strand selector at a strand-biased site" src="images/strand-comparison.png" /><figcaption>Figure 41. The same site with each Strand setting. The alternative base (green A in the reads) is carried only by reverse-strand reads, which is a typical sign of an artefact. With only those reads shown it is frequent enough for the coverage bar to colour the site. The allele panel shows the same thing as numbers (Figure 25).</figcaption></figure>
 <h3 id="114-numeric-limits">11.4 Numeric limits</h3>
 <p><strong>Filter by Value</strong> and <strong>BAQ Filters</strong> hold numeric limits. Every box is empty to start with, and an empty box means no limit, so nothing is filtered until you type a number. A number is applied as typed, including 0: a maximum edit distance of 0 keeps only reads that match the reference exactly.</p>
 <div class="tablewrap"><table>
@@ -978,7 +1108,7 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <li><strong>exclude</strong>: reads with the property are hidden.</li>
 </ul>
 <p>Point at a property's name to see what it means.</p>
-<figure><img class="shot" alt="Duplicates and mates excluded" src="images/filters-flags-set.png" /><figcaption>Figure 39. Duplicates and mates set to exclude; everything else is left at any.</figcaption></figure>
+<figure><img class="shot" alt="Duplicates and mates excluded" src="images/filters-flags-set.png" /><figcaption>Figure 42. Duplicates and mates set to exclude; everything else is left at any.</figcaption></figure>
 <p><strong>SAM flags</strong> come from the BAM:</p>
 <div class="tablewrap"><table>
 <thead>
@@ -1056,7 +1186,7 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <p><strong>Pair orientation</strong> selects by the orientation of the pair: <code>F1R2</code>, <code>R1F2</code>, <code>F1F2</code>, <code>R1R2</code>. F and R are forward and reverse; 1 and 2 are read 1 and read 2.</p>
 <h3 id="116-the-filters-in-use">11.6 The filters in use</h3>
 <p>The filters that are switched on are listed at the top of the Filters card, and the card's header shows how many there are. Click the <strong>×</strong> on a badge to switch that one off, or <strong>Clear All</strong> to reset everything.</p>
-<figure><img class="shot" alt="Filters applied" src="images/filters-active.png" /><figcaption>Figure 40. Duplicates and mates excluded and a minimum mapping quality of 20, leaving non-duplicate reads that cross the site.</figcaption></figure>
+<figure><img class="shot" alt="Filters applied" src="images/filters-active.png" /><figcaption>Figure 43. Duplicates and mates excluded and a minimum mapping quality of 20, leaving non-duplicate reads that cross the site.</figcaption></figure>
 <p>Each badge states the condition that is applied:</p>
 <ul>
 <li><strong><code>require …</code></strong> (blue): only reads with this property are shown. These come from properties set to require, from minimums (<code>require MAPQ ≥ 20</code>), from the Strand selector and from the allele filter.</li>
@@ -1065,7 +1195,7 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 </ul>
 <h3 id="117-reset-download-and-presets">11.7 Reset, download and presets</h3>
 <p>Open the gear on the Filters card:</p>
-<figure><img class="shot" alt="The Filters gear menu" src="images/filters-gear-menu.png" /><figcaption>Figure 41. The Filters gear menu.</figcaption></figure>
+<figure><img class="shot" alt="The Filters gear menu" src="images/filters-gear-menu.png" /><figcaption>Figure 44. The Filters gear menu.</figcaption></figure>
 <ul>
 <li><strong>Reset filters</strong> returns every filter to its default and clears the allele filter.</li>
 <li><strong>Download settings (.json)</strong> saves the current filter settings as a file.</li>
@@ -1077,7 +1207,7 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <h2 id="12-selecting-isolating-and-exporting-reads">12. Selecting, isolating and exporting reads</h2>
 <h3 id="121-select-reads">12.1 Select reads</h3>
 <p>Hold <strong>Shift</strong> and click a read in the alignment view. The read gets a green outline and its name is added to the <strong>Selected reads</strong> bar above the alignment view. You can also paste a read name into the box there and click <strong>Add</strong> or press Enter.</p>
-<figure><img class="shot" alt="Reads selected in the alignment view" src="images/read-selection.png" /><figcaption>Figure 42. Two reads selected. Their names are listed in the bar above the alignment view, with the actions for them.</figcaption></figure>
+<figure><img class="shot" alt="Reads selected in the alignment view" src="images/read-selection.png" /><figcaption>Figure 45. Two reads selected. Their names are listed in the bar above the alignment view, with the actions for them.</figcaption></figure>
 <p><strong>[✕]</strong> next to a name removes that read from the selection. <strong>Clear List</strong> empties the selection and restores the full read set; a message offers <strong>Undo</strong>.</p>
 <h3 id="122-use-the-selection">12.2 Use the selection</h3>
 <div class="tablewrap"><table>
@@ -1102,8 +1232,8 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 </tr>
 </tbody>
 </table></div>
-<figure><img class="shot" alt="Show only these" src="images/read-selection-show-only.png" /><figcaption>Figure 43. After Show only these: only the selected read pairs remain.</figcaption></figure>
-<figure><img class="shot" alt="Hide these" src="images/read-selection-hide.png" /><figcaption>Figure 44. After Hide these: the selected read pairs are gone and everything else is shown.</figcaption></figure>
+<figure><img class="shot" alt="Show only these" src="images/read-selection-show-only.png" /><figcaption>Figure 46. After Show only these: only the selected read pairs remain.</figcaption></figure>
+<figure><img class="shot" alt="Hide these" src="images/read-selection-hide.png" /><figcaption>Figure 47. After Hide these: the selected read pairs are gone and everything else is shown.</figcaption></figure>
 <p>Selection works by read name, so a read and its mate always go together. <strong>Show only these</strong> and <strong>Hide these</strong> act on the selection as it stands when you click. If you change the selection afterwards, click the button again.</p>
 <p>Both apply to the site you are viewing. When you select another site the full read set is shown again and a short message says so. Your selection is kept, so you can use it again there.</p>
 <p><strong>Export</strong> saves a file named <code>selected_reads_&lt;sequence&gt;_&lt;position&gt;.bam</code> for the site you are viewing. It opens in a new browser tab, so allow pop-ups for the page if nothing downloads. The file holds the selected reads that also pass the filters in force, so reset the filters first if you want every selected read. The file has no index; run <code>samtools index</code> on it before loading it elsewhere.</p>
@@ -1111,7 +1241,7 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <hr />
 <h2 id="13-housekeeping-caches-saved-lists-and-presets">13. Housekeeping: caches, saved lists and presets</h2>
 <h3 id="131-the-header-gear">13.1 The header gear</h3>
-<figure><img class="shot" alt="The header gear menu" src="images/header-gear-menu.png" /><figcaption>Figure 45. The header gear menu. Each item says what it affects.</figcaption></figure>
+<figure><img class="shot" alt="The header gear menu" src="images/header-gear-menu.png" /><figcaption>Figure 48. The header gear menu. Each item says what it affects.</figcaption></figure>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -1240,20 +1370,20 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <ol>
 <li>Click the variant at <code>demo_seg1:5000</code>.</li>
 <li>Look at the allele panel: the ALT allele A reads <code>0+ / 13−</code> and is marked <strong>⚠ strand</strong> (Figure 25).</li>
-<li>To see it in the reads, set <strong>Strand</strong> to <strong>Plus (+)</strong>, then to <strong>Minus (-)</strong>: the green A appears only with <strong>Minus (-)</strong> (Figure 38).</li>
+<li>To see it in the reads, set <strong>Strand</strong> to <strong>Plus (+)</strong>, then to <strong>Minus (-)</strong>: the green A appears only with <strong>Minus (-)</strong> (Figure 41).</li>
 <li>Set <strong>Strand</strong> back to <strong>Both</strong> and press <strong>X</strong> to mark the variant as an artefact; press <strong>E</strong> to note why.</li>
 </ol>
 <h3 id="152-does-the-support-survive-without-duplicates">15.2 Does the support survive without duplicates?</h3>
 <ol>
 <li>Click a variant.</li>
-<li>Open <strong>Flags and read types</strong> and set <strong>Duplicates</strong> and <strong>mates</strong> to <strong>exclude</strong> (Figure 39).</li>
-<li>The track now holds only non-duplicate reads that cross the site, and the list of filters in use shows <code>exclude duplicates</code> and <code>exclude mates</code> (Figure 40). Compare the allele balance in the coverage bar with what you saw before.</li>
+<li>Open <strong>Flags and read types</strong> and set <strong>Duplicates</strong> and <strong>mates</strong> to <strong>exclude</strong> (Figure 42).</li>
+<li>The track now holds only non-duplicate reads that cross the site, and the list of filters in use shows <code>exclude duplicates</code> and <code>exclude mates</code> (Figure 43). Compare the allele balance in the coverage bar with what you saw before.</li>
 <li>Click <strong>Clear All</strong>.</li>
 </ol>
 <h3 id="153-which-reads-carry-a-deletion">15.3 Which reads carry a deletion?</h3>
 <ol>
 <li>Click the deletion at <code>demo_seg1:3300</code>.</li>
-<li>In the allele panel, click <code>DEL 7</code>, the row marked <code>ALT</code> (Figure 31), or press its number.</li>
+<li>In the allele panel, click <code>DEL 7</code>, the row marked <code>ALT</code> (Figure 34), or press its number.</li>
 <li>Shift-click any reads you want to keep a record of and click <strong>Export</strong>.</li>
 <li>Select the next variant. The allele filter is cleared for you.</li>
 </ol>
@@ -1262,11 +1392,11 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <li>Add position <code>3700</code> on <code>demo_seg1</code>.</li>
 <li>Open <strong>Flags and read types</strong> and set <strong>split reads</strong> to <strong>require</strong>. The reads that remain all stop at the same base:</li>
 </ol>
-<figure><img class="shot" alt="Split reads at a breakpoint" src="images/split-reads-site.png" /><figcaption>Figure 46. Only split reads shown. They all end at the breakpoint.</figcaption></figure>
+<figure><img class="shot" alt="Split reads at a breakpoint" src="images/split-reads-site.png" /><figcaption>Figure 49. Only split reads shown. They all end at the breakpoint.</figcaption></figure>
 <ol start="3">
 <li>The other parts of these reads are in the same track but on another sequence. Click a read: the details box lists its <strong>Supplementary Alignments</strong>, which give the other location. Type that region into the IGV position box, here <code>demo_seg2:700-1100</code>:</li>
 </ol>
-<figure><img class="shot" alt="The other half of the split reads" src="images/split-reads-partner.png" /><figcaption>Figure 47. The partner segments of the same reads on <code>demo_seg2</code>.</figcaption></figure>
+<figure><img class="shot" alt="The other half of the split reads" src="images/split-reads-partner.png" /><figcaption>Figure 50. The partner segments of the same reads on <code>demo_seg2</code>.</figcaption></figure>
 <ol start="4">
 <li>Set <strong>split reads</strong> back to <strong>any</strong> when you are done.</li>
 </ol>
@@ -1276,7 +1406,7 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <li>Tick <strong>View as Pairs</strong>.</li>
 <li>In <strong>Flags and read types</strong>, set <strong>F1F2</strong> under Pair orientation to <strong>require</strong>. Only pairs with both mates on the forward strand remain:</li>
 </ol>
-<figure><img class="shot" alt="Pairs with both mates on the forward strand" src="images/orientation-f1f2.png" /><figcaption>Figure 48. Pairs in F1F2 orientation.</figcaption></figure>
+<figure><img class="shot" alt="Pairs with both mates on the forward strand" src="images/orientation-f1f2.png" /><figcaption>Figure 51. Pairs in F1F2 orientation.</figcaption></figure>
 <h3 id="156-review-a-whole-list">15.6 Review a whole list</h3>
 <ol>
 <li>Press <strong>N</strong> to open the first variant without a status.</li>
@@ -1505,6 +1635,14 @@ build_variant_browser -b B.bam -r ref.fa -v B.vcf.gz -o Browsers/sampleB
 <td><code>s=2000</code></td>
 <td>Subsample size of a deep site</td>
 </tr>
+<tr>
+<td><code>pattern-mode=common</code> and similar</td>
+<td>The read-pattern filter and thresholds, by the name of the box (<a href="#95-read-patterns">section 9.5</a>)</td>
+</tr>
+<tr>
+<td><code>pp=p4~4</code></td>
+<td>The read pattern selected in the allele panel</td>
+</tr>
 </tbody>
 </table></div>
 <h3 id="a4-columns-of-the-review-table-tsv">A.4 Columns of the review table (.tsv)</h3>
@@ -1645,7 +1783,7 @@ build_variant_browser -b demo_input/demo_reads.md.bam -r demo_input/demo_ref.fa 
 start_server --data-dir Browsers --port 8000
 </code></pre>
 <p>Then open <code>http://localhost:8000/demo/</code>.</p>
-<h3 id="b2-datasets-for-sections-8-93-94-and-10">B.2 Datasets for sections 8, 9.3, 9.4 and 10</h3>
+<h3 id="b2-datasets-for-sections-8-93-to-95-and-10">B.2 Datasets for sections 8, 9.3 to 9.5, and 10</h3>
 <div class="tablewrap"><table>
 <thead>
 <tr>
@@ -1667,7 +1805,7 @@ start_server --data-dir Browsers --port 8000
 </tr>
 <tr>
 <td>Deep viral-like sample</td>
-<td>Figures 34, 35</td>
+<td>Figures 37, 38</td>
 <td>Two 30 kb sequences, 1.4 million reads, about 198,000 reads crossing one SNP at <code>chr1:11501</code></td>
 </tr>
 <tr>
@@ -1679,6 +1817,11 @@ start_server --data-dir Browsers --port 8000
 <td>Amplicon test set</td>
 <td>Figures 28–30</td>
 <td>A 3 kb sequence with one gene on each strand, a GFF3 annotation, and 8 tiled 400 bp amplicons (primer BED, primers not trimmed), 50 read pairs of 2×250 bp each; nine variants: missense, synonymous, stop gained, frameshift, in-frame insertion, a missense change on the − strand, one in a primer and present in every molecule, one that exists only in one primer's sequence, and one outside the genes. Made by <code>demo/simulate_amplicons.py</code>; build it with <code>-a genes.gff3 -p primers.bed --bam-processing skip</code></td>
+</tr>
+<tr>
+<td>Read-pattern test set</td>
+<td>Figures 31–33</td>
+<td>A 2 kb sequence; 546 read pairs of 2×150 bp around position 1000, 490 of which cross it: 300 reference, 130 of a lineage with three SNVs (930, 1000, 1110), 60 of a lineage with two (1000, 1060), 30 artefact pairs with SNVs at 1000 and 1005 only at the end of reverse reads, 14 of the second lineage from a contaminant with 12 scattered mismatches and mapping quality 25, 12 PCR chimeras of the two lineages, and sequencing errors at 0.2 % per base. Made by <code>demo/simulate_patterns.py</code>; build it with <code>--bam-processing skip</code></td>
 </tr>
 </tbody>
 </table></div>

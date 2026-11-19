@@ -319,12 +319,15 @@ function buildAlleleFilterPanel(variant, site, alleles) {
         </div>
         ${typeof evidenceTableHtml === "function"
             ? `<div class="card-footer bg-white p-2 evidence-footer">${evidenceTableHtml(alleles, expected)}</div>` : ""}
+        ${typeof loadSitePatterns === "function"
+            ? `<div class="card-footer bg-white p-2 patterns-footer" id="patterns-footer"></div>` : ""}
     `;
 
     // Below the variant list, so the table does not move under the pointer
     // when the panel changes height from one variant to the next.
     const variantCard = document.querySelector('.card.shadow-sm.mt-3');
     variantCard.insertAdjacentElement('afterend', panel);
+    if (typeof loadSitePatterns === "function") loadSitePatterns(site);
 
     // Clicking an allele (anywhere but its tick box) shows only its reads.
     panel.querySelector('#allele-rows-container').addEventListener('click', e => {
